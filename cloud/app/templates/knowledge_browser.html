@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hivemind Base Browser</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', 'Consolas', monospace; background: #0a0c10; color: #e8ecf2; padding: 24px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #2a303d; }
+        .top-bar h1 { font-size: 22px; font-weight: 700; color: #4ade80; }
+        .nav-links a { color: #9aa4b8; text-decoration: none; margin-left: 16px; font-size: 13px; padding: 6px 12px; border: 1px solid #2a303d; border-radius: 6px; transition: all 0.2s; }
+        .nav-links a:hover { color: #4ade80; border-color: #4ade80; }
+        .summary-bar { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .summary-card { background: #161a24; border: 1px solid #2a303d; border-radius: 8px; padding: 16px 24px; flex: 1; min-width: 120px; text-align: center; }
+        .summary-card .number { font-size: 28px; font-weight: 700; color: #4ade80; }
+        .summary-card .label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-top: 4px; }
+        .section-header { font-size: 16px; font-weight: 700; color: #e8ecf2; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #2a303d; display: flex; align-items: center; gap: 10px; }
+        .section-header .badge { background: #22c55e20; color: #4ade80; font-size: 12px; padding: 2px 10px; border-radius: 12px; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; background: #161a24; border: 1px solid #2a303d; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+        th { background: #1c2030; padding: 12px 16px; text-align: left; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #2a303d; }
+        td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #1c2030; }
+        .kb-row { cursor: pointer; transition: background 0.15s; }
+        .kb-row:hover { background: #1c2030; }
+        .kb-desc { font-size: 11px; color: #6b7280; }
+        .doc-row { display: none; background: #0e1018; }
+        .doc-row.visible { display: table-row; }
+        .preview { font-size: 11px; color: #6b7280; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+        .doc-type-breakdown { display: flex; gap: 16px; margin-bottom: 24px; }
+        .doc-type-chip { background: #161a24; border: 1px solid #2a303d; border-radius: 6px; padding: 8px 16px; font-size: 12px; color: #9aa4b8; }
+        .doc-type-chip .count { color: #4ade80; font-weight: 700; margin-right: 6px; }
+        .storage-path { background: #0a0c10; border: 1px solid #2a303d; border-radius: 6px; padding: 12px 16px; margin-top: 16px; font-size: 12px; }
+        .storage-path .label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
+        .storage-path .path { color: #4ade80; margin-top: 4px; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1>HIVEMIND Base Browser</h1>
+        <div class="nav-links">
+            <a href="/dashboard">Dashboard</a>
+            <a href="/docs">API Docs</a>
+            <a href="/health">Health</a>
+        </div>
+    </div>
+
+    <div class="summary-bar">
+        <div class="summary-card"><div class="number">{{ kb_count }}</div><div class="label">Knowledge Bases</div></div>
+        <div class="summary-card"><div class="number">{{ doc_count }}</div><div class="label">Documents</div></div>
+        <div class="summary-card"><div class="number">{{ chunk_count }}</div><div class="label">Chunks</div></div>
+        <div class="summary-card"><div class="number">{{ token_count }}</div><div class="label">Total Tokens</div></div>
+        <div class="summary-card"><div class="number">{{ sim_count }}</div><div class="label">Simulations</div></div>
+    </div>
+
+    <div class="doc-type-breakdown">
+        <div class="doc-type-chip"><span class="count">{{ framework_doc_count }}</span>Framework Docs</div>
+        <div class="doc-type-chip"><span class="count">{{ sim_doc_count }}</span>Simulation Docs</div>
+        <div class="doc-type-chip"><span class="count">{{ prac_doc_count }}</span>Practicality Docs</div>
+    </div>
+
+    <!-- Knowledge Bases Section -->
+    <div class="section-header">Knowledge Bases <span class="badge">{{ kb_count }}</span></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Documents</th>
+                <th>Chunks</th>
+                <th>Tokens</th>
+                <th>Created</th>
+                <th>Model</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ kb_rows | safe }}
+        </tbody>
+    </table>
+
+    <!-- Simulation Formulas Section -->
+    <div class="section-header">Simulation Formulas <span class="badge">{{ sim_count }}</span></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Inputs</th>
+                <th>Outputs</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ sim_rows | safe }}
+        </tbody>
+    </table>
+
+    <div class="storage-path">
+        <div class="label">Local file storage path</div>
+        <div class="path">{{ storage_path }}</div>
+    </div>
+
+    <script>
+        function toggleDocs(kbId) {
+            const rows = document.querySelectorAll('.doc-row[data-kb="' + kbId + '"]');
+            rows.forEach(row => row.classList.toggle('visible'));
+        }
+        setTimeout(() => location.reload(), 30000);
+    </script>
+</body>
+</html>

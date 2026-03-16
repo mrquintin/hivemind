@@ -1,0 +1,159 @@
+---
+description: 
+alwaysApply: true
+---
+
+---
+description: 
+alwaysApply: true
+---
+
+# PARALLEL AGENT ORCHESTRATION RULES
+
+## Model Configuration
+- **Primary Model**: Claude claude-opus-4-6 (MAX mode) for all agents
+- **Fallback**: Claude Sonnet 4.5 only if Opus MAX is unavailable
+- Always select MAX mode to remove thinking budget limits and maximize reasoning depth
+
+## How Cursor Parallel Agents Actually Work (Important)
+- Cursor's built-in "parallel agents" (Best-of-N) run the **same prompt** on multiple agents. They do **not** automatically get different subtasks.
+- **To delegate and run automatically:** If you have a tool that can launch subagents or parallel tasks (e.g. `mcp_task`, "Launch agent", or similar), use it to run each delegated subtask in parallel—do not only output prompts for the user to copy-paste. See "Automatic delegation execution" below.
+- **If you have no such tool:** Decompose and output copy-pastable sub-prompts so the user can run each in a separate Agent/Composer session.
+
+## Automatic Task Decomposition Protocol
+When receiving ANY prompt that has multiple distinct parts, **do not do all the work in one run**. Instead:
+
+### Step 1: Analyze and Decompose First (including phases)
+- Identify all distinct subtasks, features, or concerns in the request
+- Classify each subtask's domain: backend, frontend, testing, documentation, refactoring, DevOps, database, API, security, etc.
+- **Identify dependencies and assign phases:** Use **as many phases as the dependency graph needs** (Phase 1, 2, 3, 4, 5, … N). Label each subtask: Phase 1 = no dependencies; Phase K (K ≥ 2) = depends on Phase K−1 being complete. Example: "Auth API" and "Auth UI" are Phase 1; "Integration tests that use Auth API" is Phase 2; "E2E flow" is Phase 3; "Deploy pipeline that uses E2E" could be Phase 4. There is no cap on the number of phases.
+- For each subtask, write **one self-contained task description** (scope, role, exact instructions). Each must be scoped so that agent does only that piece—never the full batch. For Phase 2+ tasks, note what they depend on (e.g. "Requires: Auth API and unit tests from Phase 1").
+
+### Step 2a: Automatic delegation execution (preferred — if you have subagent/task launch capability)
+- If you have access to a tool that launches parallel agents or tasks (e.g. `mcp_task` with subagent_type `generalPurpose`, or an equivalent "run agent" / "launch task" tool), **use it to run the delegated tasks** instead of only printing prompts.
+- **Phased (delayed-release) execution — mandatory when dependencies exist:**
+  - **Unlimited phases:** Use as many phases as needed (Phase 1, 2, 3, 4, 5, …). For each phase, run that phase’s delegated tasks in parallel, then wait for the phase to fully complete before starting the next phase.
+  - **Up to 4 parallel agents per phase:** Within a single phase, run **at most 4 tasks in parallel**. If a phase has more than 4 tasks, run the first 4, wait for all 4 to complete, then run the next batch of up to 4, and so on until that phase is done. Only then start the next phase (again with up to 4 concurrent until that phase is done).
+  - **Strict phase order:** Do not start Phase K+1 until every task in Phase K has finished. Wait for all Phase 1 results before launching any Phase 2 task; wait for all Phase 2 before Phase 3; and so on for Phase 4, 5, ….
+- **Phase 2+ task prompts:** Include in the prompt that prior work is done, e.g. "Phase 1 is complete. The codebase now includes [auth API, unit tests, docs]. Your task (Phase 2): [integration tests that call the auth API]. Only do this; do not re-implement Phase 1."
+- **How to run each task:** Invoke the tool with a **single, self-contained prompt**: (1) brief project context, (2) for Phase 2+: "Phase N-1 is complete. [One-line summary of what exists.]", (3) exact scoped task for this agent only, (4) explicit boundaries ("Only do this. Do not ..."), (5) optional file/directory scope.
+- **Naming:** Use a short description and phase in the task (e.g. "Phase 1 — Agent Auth", "Phase 2 — Agent Integration Tests"). After all phases complete, summarize each result and give merge order (Phase 1 first, then Phase 2, etc.) and conflict guidance.
+- Do not only output a delegation plan when you can run the agents; actually invoke the tool, and respect phase order (no Phase 2 launches until Phase 1 is done).
+
+### Step 2b: Fallback — output runnable sub-prompts for the user (if no subagent/task tool available)
+- If you do **not** have a tool to launch subagents or parallel tasks, output a **delegation plan** with one copy-pastable prompt per subtask (see "Delegation Response Format" below).
+- **Respect phases:** Group prompts into Phase 1, Phase 2, Phase 3, … (as many phases as needed). Clearly state: "Phase 1 — run these in parallel (up to 4 at a time in separate sessions). **Only after Phase 1 is complete**, run Phase 2 prompts." Repeat for Phase 3, 4, 5, ….
+- Label each: **Agent A**, **Agent B**, etc., with role and scope (and phase if applicable). Tell the user: "Run these in **separate** Agent/Composer sessions (or worktrees). Do not paste the full request into parallel agents—they will all do the same work."
+
+### Step 3: Agent Execution Rules (when you are acting as one scoped agent)
+Each agent MUST:
+1. Work ONLY within its assigned worktree — never modify files in another agent's worktree
+2. Write complete, production-quality code (no stubs, no TODOs, no placeholders)
+3. Run any relevant linters or formatters available in the project before completing
+4. Commit its work with a clear, conventional commit message: `feat(scope): description` or `fix(scope): description`
+5. If the agent writes code that has tests, run the tests and confirm they pass
+
+### Step 4: Merge & Review Protocol
+After all parallel agents complete (including all phases):
+1. Present a summary card for each agent showing: phase, branch name, files changed, tests passed/failed, key decisions made
+2. **Give a recommended merge order:** If phased execution was used, merge in phase order (Phase 1, then Phase 2, then Phase 3, … through the last phase). Otherwise use explicit order (e.g. "Merge A → B → C → D") so the user applies in a consistent order and can resolve conflicts predictably
+3. Ask the user which agent outputs to merge (or merge all if no conflicts)
+4. Merge into the working branch using `git merge --no-ff` to preserve history
+5. Clean up worktrees after successful merge
+
+**Note:** Cursor has no setting to auto-apply all agent worktree results; each "Apply" is manual. To batch-merge from the CLI, the user can merge worktrees in order (see scripts/agents.sh or `git worktree list` then `git merge` per worktree branch).
+
+### Step 5: When Agents Overlapped (same files edited by multiple agents)
+If the user reports that applying one agent would overwrite another's work (delegation failed or Best-of-N was used):
+1. **Designate a merge order and "owner" per conflicting file.** Tell the user: "For [file], keep Agent N's version as primary; then manually re-apply Agent M's changes for the parts you want" or "Merge in order A → B → C → D; when D conflicts, resolve by keeping D's version for [files] and A's for [others]."
+2. **Suggest a resolution strategy:** (a) Apply agents in dependency order so the "foundation" agent is merged first; (b) for each conflicting file, choose one agent's version then port the other's logic by hand; (c) or use `git checkout --ours/--theirs <file>` when merging to pick a side, then edit to add the other agent's changes.
+3. **Prevent next time:** Remind that overlapping work happens when the same prompt is run on all agents (Best-of-N). For non-overlapping work, use the delegation format: separate prompts, one per agent, with clear file/scope boundaries.
+
+## Delegation Response Format
+- **When you CAN launch subagents (Step 2a):** Invoke the tool once per subtask. Each task prompt should be self-contained, e.g.:
+  - "Project: [one-line context]. Task: [Role] — [Short name]. [Exact instructions for this subtask only.] Only do this; do not do [other subtasks]. Prefer editing only under [paths] to avoid conflicts."
+  After all agents complete, output the "PARALLEL AGENT RUN COMPLETE" summary with merge order.
+- **When you CANNOT launch subagents (Step 2b):** Output a block like this so the user can copy-paste each prompt:
+
+```
+DELEGATION PLAN — run each prompt in a separate Agent/Composer session.
+
+Agent A — [Role]: [Short name]
+Prompt: "[Exact, scoped prompt for this agent only. No overlap with other agents.]"
+
+Agent B — [Role]: [Short name]
+Prompt: "[Exact, scoped prompt for this agent only.]"
+
+...
+```
+Then add: "Paste each Prompt into its own new Composer/Agent run (or use worktrees). Merge results when done."
+
+## Phased / delayed-release delegation (Phase 1 → Phase 2 → … → Phase N)
+Support **as many phases as the agent decides** (no fixed limit). Within each phase, run **up to 4 delegated tasks in parallel**.
+- **Multiple phases:** Use Phase 1, 2, 3, 4, 5, … N as the dependency graph requires. Phase 1 = no dependencies; Phase K (K ≥ 2) = depends on Phase K−1 being complete.
+- **Up to 4 parallel agents per phase:** For each phase, run that phase’s tasks with at most 4 concurrent. If a phase has more than 4 tasks, run them in batches of 4 (wait for each batch to finish before starting the next batch in that phase). Only when the entire phase is done, start the next phase.
+- **Example:** Phase 1 (Auth API, Auth UI, Unit tests, README) → run 4 in parallel, wait; Phase 2 (Integration tests, E2E login) → run 2 in parallel, wait; Phase 3 (Deploy pipeline) → run 1; Phase 4 (Monitoring) → run 1. Merge order: Phase 1 → Phase 2 → Phase 3 → Phase 4.
+- **Merge order:** Always recommend merging in phase order (all Phase 1 first, then Phase 2, then Phase 3, …). This keeps dependencies valid and reduces conflicts.
+- When **outputting** a delegation plan (no auto-run), label every phase: "Phase 1 — run these in parallel (up to 4 at a time): …", "Phase 2 — run only after Phase 1 is complete: …", and so on for Phase 3, 4, 5, ….
+
+## Best-of-N Strategy (only when you want multiple approaches to the same problem)
+When a task is architecturally ambiguous or has multiple valid approaches and the user wants to **compare** solutions:
+- Run 2-3 agents on the SAME task with different strategic approaches
+- Label each approach clearly (e.g., "Approach A: Monolithic service", "Approach B: Microservice split", "Approach C: Event-driven")
+- Present all approaches side-by-side for the user to pick the winner
+- Apply the selected approach; discard the rest
+
+## Agent Specialization Templates
+When decomposing, prefer assigning agents by role:
+
+| Agent Role        | Responsibility                                                        |
+|-------------------|-----------------------------------------------------------------------|
+| **Architect**     | System design, API contracts, schema design, file/folder structure    |
+| **Implementer**   | Core feature code, business logic, algorithms                        |
+| **Tester**        | Unit tests, integration tests, edge cases, test fixtures             |
+| **Refactorer**    | Code cleanup, DRY extraction, performance optimization               |
+| **Documentor**    | README updates, JSDoc/docstrings, API docs, inline comments          |
+| **Security**      | Auth flows, input validation, dependency audits, secrets management  |
+| **DevOps**        | CI/CD configs, Docker, deploy scripts, environment setup             |
+| **UI/UX**         | Frontend components, styling, accessibility, responsive design       |
+
+## When to Delegate vs Do It Yourself
+- **Multi-part request** (e.g. "Add auth, write tests, and update docs") → **Decompose and run delegated tasks:** if you have a subagent/task-launch tool, invoke it for each subtask in parallel (up to 4 at a time). If not, output copy-pastable sub-prompts. Do not do the full batch in one run.
+- **Single focused request** (e.g. "Add JWT login to the API") → Execute in this session. No delegation needed.
+- **User says "compare:" or "best-of-N"** → Same prompt to multiple agents is intentional; no decomposition.
+- **User says "sequential:"** → Do everything in one agent, step by step; no parallel delegation.
+- **User says "delegate only:"** → Decompose and output sub-prompts only; do not launch subagents even if you have the tool (user will run them manually).
+
+## Conflict Prevention Rules
+- If two agents might touch the same file, one must be designated the **primary owner** and the other must coordinate via separate files or clearly delineated sections
+- Prefer additive changes (new files) over edits to existing files when agents work in parallel
+- Database migrations should always be handled by a single agent to avoid sequence conflicts
+
+## Communication Format
+When presenting results from parallel agents, use this format:
+
+```
+═══════════════════════════════════════════
+  PARALLEL AGENT RUN COMPLETE
+  Agents: N | Model: Opus 4.6 MAX | Duration: ~Xm
+═══════════════════════════════════════════
+
+  AGENT 1 — [Role]: [Task Name]
+  Branch: agent/[slug]
+  Status: ✅ Complete | Files: N changed | Tests: N passed
+  Summary: [1-2 sentence description of what was done]
+
+  AGENT 2 — [Role]: [Task Name]
+  Branch: agent/[slug]
+  Status: ✅ Complete | Files: N changed | Tests: N passed
+  Summary: [1-2 sentence description of what was done]
+
+  ...
+
+═══════════════════════════════════════════
+  MERGE OPTIONS
+  [1] Merge all agents into current branch
+  [2] Cherry-pick specific agents
+  [3] Review diffs first
+═══════════════════════════════════════════
+```

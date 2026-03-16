@@ -1,0 +1,11 @@
+{
+  "git.showCursorWorktrees": true,
+  "cursor.agent.model": "claude-opus-4-6",
+  "cursor.agent.maxMode": true,
+  "cursor.composer.model": "claude-opus-4-6",
+  "cursor.worktreeMaxCount": 6,
+  "cursor.worktreeCleanupIntervalHours": 2,
+  "git.largeRepositoryThreshold": 0,
+  "git.autoRepositoryDetection": true,
+  "git.statusLimit": 0
+}

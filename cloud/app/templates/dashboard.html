@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hivemind Server Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'SF Mono', 'Consolas', monospace;
+            background: #0a0c10;
+            color: #e8ecf2;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+        .dashboard {
+            background: #161a24;
+            border: 1px solid #2a303d;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        .header { text-align: center; margin-bottom: 32px; }
+        .logo { font-size: 28px; font-weight: 700; color: #4ade80; letter-spacing: 2px; }
+        .subtitle { font-size: 12px; color: #6b7280; text-transform: uppercase; margin-top: 4px; }
+        .status-section { margin-bottom: 24px; }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: #0a0c10;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .status-label { color: #9aa4b8; font-size: 13px; }
+        .status-value { font-weight: 600; font-size: 14px; }
+        .status-online { color: #22c55e; }
+        .status-offline { color: #ef4444; }
+        .ping-section { text-align: center; padding: 24px; background: #0a0c10; border-radius: 8px; }
+        .ping-indicator {
+            width: 80px; height: 80px; border-radius: 50%;
+            background: #1f2937; border: 3px solid #2a303d;
+            margin: 0 auto 16px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s ease;
+        }
+        .ping-indicator.active {
+            background: #22c55e; border-color: #4ade80;
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.5);
+        }
+        .ping-label { color: #6b7280; font-size: 12px; }
+        .ping-time { color: #9aa4b8; font-size: 11px; margin-top: 8px; }
+        .url-box {
+            background: #0a0c10; border: 1px solid #2a303d;
+            border-radius: 8px; padding: 16px; text-align: center; margin-top: 24px;
+        }
+        .url-label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; }
+        .url-value { font-size: 14px; color: #4ade80; word-break: break-all; }
+        .apikey-section {
+            background: #0a0c10; border-radius: 8px; padding: 20px; margin-top: 24px;
+        }
+        .apikey-title { font-size: 13px; color: #9aa4b8; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 1px; }
+        .apikey-status { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .apikey-status-text { font-size: 13px; }
+        .apikey-configured { color: #22c55e; }
+        .apikey-missing { color: #ef4444; }
+        .apikey-form { display: flex; gap: 8px; }
+        .apikey-input {
+            flex: 1; background: #161a24; border: 1px solid #2a303d; border-radius: 6px;
+            padding: 10px 14px; color: #e8ecf2; font-family: inherit; font-size: 13px;
+            outline: none; transition: border-color 0.2s;
+        }
+        .apikey-input:focus { border-color: #4ade80; }
+        .apikey-input::placeholder { color: #4b5563; }
+        .apikey-btn {
+            background: #22c55e; color: #0a0c10; border: none; border-radius: 6px;
+            padding: 10px 20px; font-family: inherit; font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s; white-space: nowrap;
+        }
+        .apikey-btn:hover { background: #4ade80; }
+        .apikey-btn:disabled { background: #2a303d; color: #6b7280; cursor: not-allowed; }
+        .apikey-msg { font-size: 12px; margin-top: 10px; min-height: 16px; }
+        .apikey-msg.success { color: #22c55e; }
+        .apikey-msg.error { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="logo">HIVEMIND</div>
+            <div class="subtitle">Cloud Server Dashboard</div>
+        </div>
+        <div class="status-section">
+            <div class="status-row">
+                <span class="status-label">API Server</span>
+                <span class="status-value" id="status-api">● Checking...</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Database (PostgreSQL)</span>
+                <span class="status-value" id="status-database">● Checking...</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Vector DB (Qdrant)</span>
+                <span class="status-value" id="status-qdrant">● Checking...</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Cloudflare Tunnel</span>
+                <span class="status-value" id="status-cloudflare">● Checking...</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Uptime</span>
+                <span class="status-value" id="uptime">{{ uptime_str }}</span>
+            </div>
+        </div>
+        <div class="ping-section">
+            <div class="ping-indicator" id="pingIndicator">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+            </div>
+            <div class="ping-label">Admin Connection Check</div>
+            <div class="ping-time" id="pingTime">Waiting for ping...</div>
+        </div>
+        <div class="apikey-section">
+            <div class="apikey-title">Anthropic API Key</div>
+            <div class="apikey-status">
+                <span class="apikey-status-text" id="apikeyStatus">Checking...</span>
+                <span class="apikey-status-text" id="apikeyMasked" style="font-family:'SF Mono','Consolas',monospace;color:#6b7280;"></span>
+            </div>
+            <div class="apikey-form">
+                <input type="password" class="apikey-input" id="apikeyInput" placeholder="sk-ant-..." autocomplete="off">
+                <button class="apikey-btn" id="apikeyBtn" onclick="saveApiKey()">Save</button>
+            </div>
+            <div class="apikey-msg" id="apikeyMsg"></div>
+        </div>
+        <div class="url-box">
+            <div class="url-label">Public URL</div>
+            <div class="url-value">https://www.thenashlabhivemind.com</div>
+        </div>
+        <div class="url-box" style="margin-top: 12px;">
+            <div class="url-label">Local URL</div>
+            <div class="url-value">http://localhost:8000</div>
+        </div>
+        <div class="url-box" style="margin-top: 12px;">
+            <div class="url-label">Quick Links</div>
+            <div class="url-value" style="display: flex; gap: 16px; justify-content: center;">
+                <a href="/knowledge-browser" style="color:#4ade80;">Knowledge Browser</a>
+                <a href="/docs" style="color:#4ade80;">API Docs</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        let lastPingTime = 0;
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}h ${m}m ${s}s`;
+        }
+        function setStatus(elementId, status, message) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            if (status === 'online') { el.innerHTML = '● ONLINE'; el.className = 'status-value status-online'; }
+            else if (status === 'offline') {
+                const shortMsg = message && message.length > 60 ? message.substring(0, 60) + '...' : (message || '');
+                el.innerHTML = '● OFFLINE<br><span style="font-size:10px;color:#9aa4b8;font-weight:400;">' + shortMsg + '</span>';
+                el.className = 'status-value status-offline';
+            }
+            else { el.innerHTML = '● UNKNOWN'; el.className = 'status-value'; el.title = message; }
+        }
+        async function checkHealth() {
+            try {
+                const res = await fetch('/health/detailed');
+                const data = await res.json();
+                console.log('[health]', JSON.stringify(data));
+                for (const [service, info] of Object.entries(data.services)) {
+                    setStatus('status-' + service, info.status, info.message);
+                }
+                document.getElementById('uptime').textContent = formatUptime(data.uptime_seconds);
+            } catch (e) {
+                setStatus('status-api', 'offline', 'Cannot reach API');
+                setStatus('status-database', 'unknown', 'Cannot check');
+                setStatus('status-qdrant', 'unknown', 'Cannot check');
+                setStatus('status-cloudflare', 'unknown', 'Cannot check');
+            }
+        }
+        async function checkPing() {
+            try {
+                const res = await fetch('/admin/ping-status');
+                const data = await res.json();
+                const indicator = document.getElementById('pingIndicator');
+                const timeEl = document.getElementById('pingTime');
+                if (data.last_ping > lastPingTime) {
+                    lastPingTime = data.last_ping;
+                    indicator.classList.add('active');
+                    timeEl.textContent = 'Ping received just now!';
+                    setTimeout(() => indicator.classList.remove('active'), 3000);
+                } else if (data.last_ping > 0) {
+                    const ago = Math.round(data.seconds_ago);
+                    timeEl.textContent = ago < 60 ? `Last ping: ${ago}s ago` : ago < 3600 ? `Last ping: ${Math.round(ago / 60)}m ago` : `Last ping: ${Math.round(ago / 3600)}h ago`;
+                }
+            } catch (e) { console.error('Ping check failed:', e); }
+        }
+        async function checkApiKeyStatus() {
+            try {
+                const res = await fetch('/settings/api-key-status');
+                const data = await res.json();
+                const statusEl = document.getElementById('apikeyStatus');
+                const maskedEl = document.getElementById('apikeyMasked');
+                if (data.configured) {
+                    statusEl.innerHTML = '● Configured';
+                    statusEl.className = 'apikey-status-text apikey-configured';
+                    maskedEl.textContent = data.masked + ' (' + data.source + ')';
+                } else {
+                    statusEl.innerHTML = '● Not configured';
+                    statusEl.className = 'apikey-status-text apikey-missing';
+                    maskedEl.textContent = '';
+                }
+            } catch (e) {
+                document.getElementById('apikeyStatus').textContent = 'Unable to check';
+            }
+        }
+        async function saveApiKey() {
+            const input = document.getElementById('apikeyInput');
+            const btn = document.getElementById('apikeyBtn');
+            const msg = document.getElementById('apikeyMsg');
+            const key = input.value.trim();
+            if (!key) { msg.textContent = 'Please enter an API key'; msg.className = 'apikey-msg error'; return; }
+            if (!key.startsWith('sk-')) { msg.textContent = 'Key must start with sk-'; msg.className = 'apikey-msg error'; return; }
+            btn.disabled = true; btn.textContent = 'Saving...';
+            try {
+                const res = await fetch('/settings/api-key', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({api_key: key})
+                });
+                if (res.ok) {
+                    msg.textContent = 'API key saved successfully'; msg.className = 'apikey-msg success';
+                    input.value = '';
+                    checkApiKeyStatus();
+                } else {
+                    const err = await res.json();
+                    msg.textContent = err.detail || 'Failed to save'; msg.className = 'apikey-msg error';
+                }
+            } catch (e) {
+                msg.textContent = 'Network error'; msg.className = 'apikey-msg error';
+            }
+            btn.disabled = false; btn.textContent = 'Save';
+        }
+        document.getElementById('apikeyInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') saveApiKey(); });
+        setInterval(checkHealth, 5000);
+        checkHealth();
+        setInterval(checkPing, 1000);
+        checkPing();
+        checkApiKeyStatus();
+    </script>
+</body>
+</html>

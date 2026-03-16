@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability for the main window","local":true,"windows":["main"],"permissions":["core:default","allow-ping","allow-get-local-status","allow-start-local-services","allow-stop-local-services"]}}

@@ -1,0 +1,18 @@
+mkdir -p .cursor
+cat > .cursor/hooks.json << 'EOF'
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "but cursor after-edit"
+      }
+    ],
+    "stop": [
+      {
+        "command": "but cursor stop"
+      }
+    ]
+  }
+}
+EOF
