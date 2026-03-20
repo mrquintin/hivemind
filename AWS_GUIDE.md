@@ -45,24 +45,39 @@ This keeps RDS reachable only from your app server.
 
 ## 2. Provision EC2
 
-1. **Launch instance**:
-   - AMI: Ubuntu 22.04 or 24.04 LTS
-   - Instance type: `t3.large` minimum, `t3.xlarge` for heavier use
-   - Key pair: create or select one for SSH
-   - Network: use the same VPC as RDS
+**This project’s EC2 choices (reference):**
 
-2. **Storage**: 60–100 GB gp3.
+| Setting | Value |
+|--------|--------|
+| AMI | **Ubuntu 24.04 LTS** |
+| Instance type | **t3.xlarge** (4 vCPU, 16 GiB) |
+| Key pair | **hivemindkeypair** (RSA, `.pem`) |
+| Storage | **100 GiB gp3** |
+| Security group name | **hivemind-launch-wizard-1** |
+| Inbound (restricted) | **SSH 22** and **Custom TCP 8000** — source **My IP** only |
+
+Keep your downloaded `.pem` private; **never commit it** to git. You can record the path to your key on your machine in `deploy/aws/EC2-PROVISIONING.local.txt` (that file is gitignored).
+
+1. **Launch instance**:
+   - AMI: Ubuntu 24.04 LTS (or 22.04 if you prefer)
+   - Instance type: `t3.xlarge` (or `t3.large` minimum for lighter use)
+   - Key pair: **hivemindkeypair** (or create/select another for SSH)
+   - **Auto-assign public IP**: Enable (optional if you use an Elastic IP later)
+   - Network: use the **same VPC as RDS**
+
+2. **Storage**: 100 GiB gp3 (60–100 GB is typical).
 
 3. **Security group** (for restricted access):
-   - **22/tcp**: your IP(s) only
+   - **22/tcp**: your IP(s) only (e.g. **My IP** in the launch wizard)
    - **8000/tcp**: your IP(s) only (or your office/VPN CIDR)
    - Do *not* open 8000 to 0.0.0.0/0
 
-4. **Elastic IP**: Allocate and associate one so the Admin/Client can point at a stable host.
+4. **Elastic IP**: Allocate and associate one so the Admin/Client can point at a stable host (**EC2 → Network & Security → Elastic IPs**).
 
-5. SSH in:
+5. SSH in (use your actual path to the `.pem` and your Elastic IP or public IP):
    ```bash
-   ssh -i /path/to/key.pem ubuntu@YOUR_EC2_PUBLIC_IP
+   chmod 400 /path/to/hivemindkeypair.pem
+   ssh -i /path/to/hivemindkeypair.pem ubuntu@YOUR_EC2_PUBLIC_IP
    ```
 
 ---

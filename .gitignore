@@ -40,3 +40,8 @@ release/
 .api_key
 .hivemind_settings.json
 target/
+# Never commit SSH keys or local AWS notes with paths
+*.pem
+deploy/aws/EC2-PROVISIONING.local.txt
+.env.aws
+deploy/aws/RDS-CREDENTIALS.local.txt
