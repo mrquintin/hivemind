@@ -5,9 +5,9 @@
 
 /**
  * API URL - checks localStorage first (set via Settings page), then env var,
- * then falls back to production.
+ * then falls back to AWS deployment.
  */
-const PRODUCTION_API_URL = "https://www.thenashlabhivemind.com";
+const PRODUCTION_API_URL = "http://13.63.209.56:8000";
 
 function normalizeApiUrl(url: string): string {
   return url.replace(/\/+$/, "");

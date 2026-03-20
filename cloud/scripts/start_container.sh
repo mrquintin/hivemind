@@ -33,7 +33,8 @@ def wait_for_postgres(url: str, timeout_seconds: int = 120) -> None:
 
 def wait_for_qdrant(url: str, timeout_seconds: int = 120) -> None:
     deadline = time.time() + timeout_seconds
-    health_url = f"{url.rstrip('/')}/health"
+    # Qdrant exposes /healthz (not /health); see https://qdrant.tech/documentation/guides/monitoring
+    health_url = f"{url.rstrip('/')}/healthz"
 
     while True:
         try:

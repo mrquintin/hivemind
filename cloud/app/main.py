@@ -195,7 +195,7 @@ def _check_readiness() -> tuple[bool, str]:
         import urllib.request
         import urllib.error
 
-        req = urllib.request.Request(f"{settings.VECTOR_DB_URL.rstrip('/')}/health", method="GET")
+        req = urllib.request.Request(f"{settings.VECTOR_DB_URL.rstrip('/')}/healthz", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status != 200:
                 return False, f"qdrant: HTTP {resp.status}"
@@ -251,7 +251,7 @@ def detailed_health_check():
     try:
         import urllib.request
         import urllib.error
-        req = urllib.request.Request(f"{settings.VECTOR_DB_URL}/health", method="GET")
+        req = urllib.request.Request(f"{settings.VECTOR_DB_URL.rstrip('/')}/healthz", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status == 200:
                 results["qdrant"] = {"status": "online", "message": "Qdrant responding"}

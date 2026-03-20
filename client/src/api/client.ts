@@ -4,17 +4,17 @@
  */
 
 /**
- * API URL - checks localStorage first (set via settings), then env var,
- * then falls back to production.
+ * API URL - checks localStorage first (set via Configure server), then env var,
+ * then falls back to AWS deployment.
  */
+const DEFAULT_API_URL = "http://13.63.209.56:8000";
+
 function getEffectiveApiUrl(): string {
   if (typeof window !== "undefined") {
     const stored = localStorage.getItem("hivemind_api_url");
     if (stored) return stored.replace(/\/+$/, "");
   }
-  return (
-    import.meta.env.VITE_API_URL || "https://www.thenashlabhivemind.com"
-  );
+  return import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 }
 
 let API_URL = getEffectiveApiUrl();
@@ -29,8 +29,7 @@ export function setServerUrl(url: string): void {
 /** Reset to the build-time default URL. */
 export function clearServerUrl(): void {
   localStorage.removeItem("hivemind_api_url");
-  API_URL =
-    import.meta.env.VITE_API_URL || "https://www.thenashlabhivemind.com";
+  API_URL = import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 }
 
 export function isCustomServerUrl(): boolean {
@@ -38,7 +37,7 @@ export function isCustomServerUrl(): boolean {
 }
 
 export function getDefaultApiUrl(): string {
-  return import.meta.env.VITE_API_URL || "https://www.thenashlabhivemind.com";
+  return import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 }
 
 // -----------------------------------------------------------------------------

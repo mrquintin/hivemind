@@ -134,6 +134,8 @@ Outputs appear in `src-tauri/target/release/bundle/`:
 
 ### Connecting to a Different Server
 
+**Client is the “output” side:** it runs analyses against the Hivemind Cloud API and database (the same API that Admin configures). The default server URL points to this project’s AWS deployment (`http://13.63.209.56:8000`). Use **Configure** on the login screen or set the env var below to use a different server.
+
 Point the Client at your hosted API URL. Set the environment variable before running:
 ```bash
 VITE_API_URL=https://your-server.com npm run tauri dev

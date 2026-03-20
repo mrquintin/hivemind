@@ -52,6 +52,8 @@ Installers appear in `src-tauri/target/release/bundle/`:
 
 ## Connecting to the Server
 
+**Admin is the “input” side:** it configures agents, knowledge bases, and simulations on the Hivemind Cloud API (stored in the AWS database). The default server URL points to this project’s AWS deployment (`http://13.63.209.56:8000`). Change it in **Settings** or at build time if your API is elsewhere.
+
 Point Admin at your hosted API URL. You can either set it in the app’s Settings UI or provide it at build/run time:
 
 ```bash

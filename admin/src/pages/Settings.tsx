@@ -196,12 +196,11 @@ export default function Settings() {
                 className="form-input"
                 value={serverUrl}
                 onChange={(e) => setServerUrlInput(e.target.value)}
-                placeholder="https://api.yourdomain.com"
+                placeholder="http://13.63.209.56:8000"
                 onKeyDown={(e) => e.key === "Enter" && handleConnect()}
               />
               <span className="form-hint">
-                Enter the cloud server's address (e.g.,
-                https://api.yourdomain.com or http://YOUR_EC2_PUBLIC_IP:8000).
+                Hivemind Cloud API (e.g. http://13.63.209.56:8000 for this AWS deployment).
               </span>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>

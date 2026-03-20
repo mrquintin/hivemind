@@ -11,27 +11,64 @@ How to run Hivemind Cloud on AWS with EC2, Amazon RDS (PostgreSQL), Qdrant, and 
 - **S3** (optional): Document uploads
 - **Restricted access**: Security groups limit access to your IP(s)
 
+**Secrets and values not in this repo** — keep them only in **gitignored** files (never commit):
+
+| File | What to store there |
+|------|---------------------|
+| `deploy/aws/RDS-CREDENTIALS.local.txt` | RDS master password, endpoint hostname, full `DATABASE_URL` for `.env.aws` |
+| `deploy/aws/EC2-PROVISIONING.local.txt` | Elastic IP, allocation ID, path to `.pem`, ready-to-run `ssh` and CORS/API URLs |
+| `deploy/aws/.env.aws` | Copy from `.env.example`; fill with real secrets for deployment on EC2 |
+
+If you need the exact values for this deployment, **open those local files** (they are listed in `.gitignore`).
+
+Throughout this guide, placeholders like `YOUR_EC2_PUBLIC_IP` and `YOUR_RDS_ENDPOINT` mean: take the real values from **`EC2-PROVISIONING.local.txt`**, **`RDS-CREDENTIALS.local.txt`**, or the AWS console — do not put those secrets in the committed guide.
+
 ---
 
 ## 1. Provision Amazon RDS (PostgreSQL)
 
+**This project’s RDS choices (reference):**
+
+| Setting | Value |
+|--------|--------|
+| DB instance identifier | **hivemind-db** |
+| Engine | **PostgreSQL 16** (match your console selection) |
+| Initial database name | **hivemind** |
+| Master username | **hivemind** |
+| Credentials | **Self-managed** |
+| Secrets (password, endpoint, `DATABASE_URL`) | See **`deploy/aws/RDS-CREDENTIALS.local.txt`** (gitignored) |
+| Instance class | **db.t4g.small** |
+| Storage type | **Provisioned IOPS SSD (io2)** |
+| Allocated storage | **100 GiB** |
+| Provisioned IOPS | **1000** |
+| EC2 compute resource | **Not connected** (optional wizard step skipped) |
+| Network | **IPv4** |
+| VPC | **default** |
+| DB subnet group | **default** |
+| Public access | **No** |
+| VPC security group | **hivemind-rds-sg** |
+| RDS Proxy | **Not created** |
+| Certificate authority | **Default** |
+| Database Insights | **Standard** |
+| Performance Insights | **Enabled** |
+| Enhanced Monitoring | **Off** |
+| Log exports | **None** (unchecked) |
+| DevOps Guru | **Off** |
+
 1. In the AWS Console, go to **RDS → Create database**.
-2. Choose **PostgreSQL 16**.
-3. Template: **Free tier** (or **Production** for higher availability).
-4. Settings:
-   - DB instance identifier: `hivemind-db` (or your choice)
-   - Master username: `hivemind`
-   - Master password: set a strong password
-   - DB name: `hivemind`
-5. Instance configuration: `db.t3.micro` (free tier) or larger.
-6. Storage: 20 GB gp3 (or more).
-7. Connectivity:
-   - VPC: default or your VPC
-   - **Public access: No** (recommended for restricted access)
-   - VPC security group: create new or use existing
-   - Enable **Publicly accessible: No** unless you need direct access from outside the VPC
-8. Create the database.
-9. After creation, note the **Endpoint** (e.g. `hivemind-db.xxxx.us-east-1.rds.amazonaws.com`).
+2. Choose **PostgreSQL 16** (or the minor version you selected).
+3. Template: **Production** or **Free tier** as appropriate; apply the settings in the table above.
+4. After creation, copy the **Endpoint** from the console into **`deploy/aws/RDS-CREDENTIALS.local.txt`** and build `DATABASE_URL` for **`deploy/aws/.env.aws`** (see section 4).
+5. **Initial database name:** in the RDS creation wizard, set **Database name** to **`hivemind`**. If you left it blank, only the default `postgres` database exists — create `hivemind` from EC2 (see below).
+
+**If the app fails with “database \"hivemind\" does not exist”:** connect from your EC2 instance (which can reach RDS) and create the database once:
+
+```bash
+# From your Mac: SSH to EC2, then run (replace YOUR_RDS_PASSWORD with the master password):
+docker run --rm postgres:16 psql "postgresql://hivemind:YOUR_RDS_PASSWORD@hivemind-db.cfugyccg0nd8.eu-north-1.rds.amazonaws.com:5432/postgres?sslmode=require" -c "CREATE DATABASE hivemind;"
+```
+
+Then restart the app: `./deploy/aws/deploy.sh` on the EC2 instance.
 
 **RDS security group (for restricted access):**
 
@@ -51,12 +88,11 @@ This keeps RDS reachable only from your app server.
 |--------|--------|
 | AMI | **Ubuntu 24.04 LTS** |
 | Instance type | **t3.xlarge** (4 vCPU, 16 GiB) |
-| Key pair | **hivemindkeypair** (RSA, `.pem`) |
+| Key pair | **hivemindkeypair** (RSA, `.pem` — never commit the key file) |
 | Storage | **100 GiB gp3** |
 | Security group name | **hivemind-launch-wizard-1** |
 | Inbound (restricted) | **SSH 22** and **Custom TCP 8000** — source **My IP** only |
-
-Keep your downloaded `.pem` private; **never commit it** to git. You can record the path to your key on your machine in `deploy/aws/EC2-PROVISIONING.local.txt` (that file is gitignored).
+| Elastic IP, SSH host, `.pem` path, CORS/API URLs | See **`deploy/aws/EC2-PROVISIONING.local.txt`** (gitignored) |
 
 1. **Launch instance**:
    - AMI: Ubuntu 24.04 LTS (or 22.04 if you prefer)
@@ -74,17 +110,20 @@ Keep your downloaded `.pem` private; **never commit it** to git. You can record 
 
 4. **Elastic IP**: Allocate and associate one so the Admin/Client can point at a stable host (**EC2 → Network & Security → Elastic IPs**).
 
-5. SSH in (use your actual path to the `.pem` and your Elastic IP or public IP):
+5. SSH in — use the **Elastic IP** and **path to your `.pem`** from **`deploy/aws/EC2-PROVISIONING.local.txt`**:
    ```bash
    chmod 400 /path/to/hivemindkeypair.pem
-   ssh -i /path/to/hivemindkeypair.pem ubuntu@YOUR_EC2_PUBLIC_IP
+   ssh -i /path/to/hivemindkeypair.pem ubuntu@YOUR_ELASTIC_IP
    ```
+   Put the same host in `CORS_ORIGINS` and the Admin/Client server URL (see the local file for a concrete example).
 
 ---
 
 ## 3. Install Docker on EC2
 
-Clone or copy the repo into `/opt/hivemind`, then:
+**Option A — From your Mac (automated):** double-click **`Setup-Hivemind-AWS.command`** in the repo root. It will SSH to the Elastic IP in that script (**13.63.209.56** by default — edit the file if yours changed), install Docker on the instance, `rsync` this project to `/opt/hivemind/HivemindSoftware`, and run `deploy/aws/deploy.sh`. You must have **`hivemindkeypair.pem`** next to the script and **`deploy/aws/.env.aws`** filled in first. The script prints anything you still need to verify in AWS (security groups, etc.). **Do not commit the `.pem` to git** (it is in `.gitignore`).
+
+**Option B — Manual:** clone or copy the repo into `/opt/hivemind`, then:
 
 ```bash
 cd /opt/hivemind/HivemindSoftware
@@ -110,13 +149,9 @@ Edit `deploy/aws/.env.aws`:
 | `JWT_SECRET` | Yes | Strong random string, e.g. `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `ANTHROPIC_API_KEY` | Yes | From https://console.anthropic.com |
 | `CLEARED_USERNAMES` | Yes | Comma-separated Admin usernames, e.g. `admin,developer` |
-| `CORS_ORIGINS` | Yes | Include your Admin/Client origins, e.g. `http://YOUR_EC2_PUBLIC_IP:8000` |
+| `CORS_ORIGINS` | Yes | Include your Admin/Client origins (host from **`EC2-PROVISIONING.local.txt`**) |
 
-Example `DATABASE_URL`:
-
-```env
-DATABASE_URL=postgresql+psycopg2://hivemind:YOUR_RDS_PASSWORD@hivemind-db.xxxx.us-east-1.rds.amazonaws.com:5432/hivemind?sslmode=require
-```
+Use the real **`DATABASE_URL`** (with password and RDS endpoint) from **`RDS-CREDENTIALS.local.txt`** or build it from **`deploy/aws/.env.example`** after you read the endpoint in the RDS console. Do not commit filled-in values.
 
 ---
 
