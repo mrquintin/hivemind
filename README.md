@@ -18,7 +18,7 @@ HivemindSoftware/
 ├── deploy/aws/         # EC2/RDS deployment files
 ├── backend/            # Shared tooling and SDKs
 ├── docs/               # Project architecture and planning docs
-├── AWS_GUIDE.md        # End-to-end AWS setup and DB migration guide
+├── docs/AWS_GUIDE.md   # End-to-end AWS setup and DB migration guide
 ├── Hivemind Admin.app  # macOS launcher for Admin
 ├── Hivemind Client.app # macOS launcher for Client
 ├── Archive Admin.app   # Admin archive/export helper
@@ -37,7 +37,7 @@ The supported server path is AWS:
 
 Start here:
 
-- [AWS_GUIDE.md](./AWS_GUIDE.md)
+- [AWS_GUIDE.md](./docs/AWS_GUIDE.md)
 - [cloud/docs/AWS_DEPLOYMENT.md](./cloud/docs/AWS_DEPLOYMENT.md)
 
 The key deployment files are:
@@ -84,7 +84,7 @@ You can either:
 
 ## Typical Workflow
 
-1. Deploy the Cloud server on AWS using `AWS_GUIDE.md`.
+1. Deploy the Cloud server on AWS using `docs/AWS_GUIDE.md`.
 2. Open the Admin app and point it at the AWS API URL.
 3. Create agents, knowledge bases, and simulations in Admin.
 4. Open the Client app and connect it to the same API URL.
@@ -97,7 +97,7 @@ You can either:
 - [Client README](./client/README.md)
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 - [DEVELOPMENT_PLAN.md](./docs/DEVELOPMENT_PLAN.md)
-- [PRODUCT_DESCRIPTION.txt](./PRODUCT_DESCRIPTION.txt)
+- [PRODUCT_DESCRIPTION.txt](./docs/PRODUCT_DESCRIPTION.txt)
 
 ## Support
 

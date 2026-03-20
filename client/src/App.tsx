@@ -30,6 +30,7 @@ type AnalysisStep =
   | "monitor_aggregating"
   | "pass_to_practicality"
   | "practicality_voting"
+  | "repairing"
   | "veto"
   | "done";
 
@@ -306,10 +307,14 @@ export default function App() {
   const theoryAgents = agents.filter((a) => a.network_type === "theory");
   const practicalityAgents = agents.filter((a) => a.network_type === "practicality");
 
-  // --- Form inputs ---
+  // --- Form inputs (primary) ---
   const [problemText, setProblemText] = useState("");
   const [sufficiency, setSufficiency] = useState(2);
   const [feasibility, setFeasibility] = useState(60);
+  const [analysisMode, setAnalysisMode] = useState<"simple" | "full">("simple");
+  const [effortLevel, setEffortLevel] = useState<"low" | "medium" | "high">("medium");
+
+  // --- Form inputs (advanced / experimental) ---
   const [density, setDensity] = useState(8000);
   const [densityMode, setDensityMode] = useState(true);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.65);
@@ -336,6 +341,7 @@ export default function App() {
   const [practicalityScores, setPracticalityScores] = useState<Map<string, number>>(new Map());
   const [votingAgentName, setVotingAgentName] = useState<string | null>(null);
   const [showVeto, setShowVeto] = useState(false);
+  const [repairCount, setRepairCount] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showOutputModal, setShowOutputModal] = useState(false);
@@ -378,7 +384,6 @@ export default function App() {
   useEffect(() => {
     const token = getAuthToken();
     if (token) {
-      // Have a stored token — try to load agents
       listPublishedAgents()
         .then((a) => {
           setAgents(a);
@@ -402,7 +407,6 @@ export default function App() {
     try {
       await enterSystem({ username: username.trim() });
       setPhase("login_fade_out");
-      // Load agents during fade
       try {
         const a = await listPublishedAgents();
         setAgents(a);
@@ -426,16 +430,17 @@ export default function App() {
   // ---------------------------------------------------------------------------
 
   function handleStartAnalysis() {
-    // Build request
     const req: AnalysisRequest = {
       problem_statement: problemText,
+      analysis_mode: analysisMode,
+      effort_level: effortLevel,
       context_document_texts: contextText.trim() ? [contextText.trim()] : [],
       sufficiency_value: sufficiency,
       feasibility_threshold: feasibility,
       theory_network_density: densityMode ? density : null,
       enabled_theory_agent_ids: densityMode ? [] : Array.from(selectedTheoryIds),
       enabled_practicality_agent_ids: Array.from(selectedPracticalityIds),
-      max_veto_restarts: 3,
+      max_veto_restarts: analysisMode === "full" ? 1 : 0,
       similarity_threshold: similarityThreshold,
       revision_strength: revisionStrength,
       practicality_criticality: practicalityCriticality,
@@ -456,6 +461,7 @@ export default function App() {
     setPracticalityScores(new Map());
     setVotingAgentName(null);
     setShowVeto(false);
+    setRepairCount(0);
     setAnalysisResult(null);
     setAnalysisError(null);
     setShowOutputModal(false);
@@ -482,7 +488,6 @@ export default function App() {
         break;
 
       case "units_created":
-        // Dynamic units created — we'll get names from solution_generated
         break;
 
       case "initial_solutions_start":
@@ -517,7 +522,6 @@ export default function App() {
         setConclusionsDrifting(true);
         setPracticalityScores(new Map());
         setVotingAgentName(null);
-        // After drift animation, switch to voting
         setTimeout(() => {
           setConclusionsDrifting(false);
           setAnalysisStep("practicality_voting");
@@ -536,12 +540,28 @@ export default function App() {
         break;
       }
 
+      case "repair_phase_start":
+        setAnalysisStep("repairing");
+        setRepairCount(event.count as number);
+        break;
+
+      case "repair_start":
+        setAnalysisStep("repairing");
+        break;
+
+      case "repair_iteration":
+        setRepairCount((prev) => prev + 1);
+        break;
+
+      case "termination":
+        // Will be followed by "complete"
+        break;
+
       case "veto": {
         setShowVeto(true);
         setRunNumber((event.restart_number as number) + 1);
         setTimeout(() => {
           setShowVeto(false);
-          // Reset for next run
           setAnalysisStep("theory_analyzing");
           setTheoryUnitNames([]);
           setCompletedTheoryAgents(new Set());
@@ -557,6 +577,8 @@ export default function App() {
 
       case "complete": {
         const output = event.output as Record<string, unknown>;
+        const budgetUsage = (output.budget_usage as Record<string, number>) || {};
+        const repairStats = (output.repair_stats as Record<string, number>) || {};
         const result: AnalysisResult = {
           id: output.id as string,
           recommendations: (output.recommendations as Recommendation[]) || [],
@@ -567,6 +589,21 @@ export default function App() {
           theory_units_created: (output.theory_units_created as number) || 0,
           total_tokens: (output.total_tokens as number) || 0,
           duration_ms: (output.duration_ms as number) || 0,
+          termination_reason: (output.termination_reason as string) || "",
+          budget_usage: {
+            llm_calls: budgetUsage.llm_calls || 0,
+            input_tokens: budgetUsage.input_tokens || 0,
+            output_tokens: budgetUsage.output_tokens || 0,
+            total_tokens: budgetUsage.total_tokens || 0,
+            wallclock_ms: budgetUsage.wallclock_ms || 0,
+          },
+          mode_used: (output.mode_used as string) || "simple",
+          repair_stats: {
+            recommendations_repaired: repairStats.recommendations_repaired || 0,
+            recommendations_recovered: repairStats.recommendations_recovered || 0,
+            recommendations_failed_after_repairs: repairStats.recommendations_failed_after_repairs || 0,
+            total_repair_iterations: repairStats.total_repair_iterations || 0,
+          },
         };
         setAnalysisResult(result);
         setAnalysisStep("done");
@@ -596,6 +633,27 @@ export default function App() {
     return "low";
   }
 
+  function statusLabel(status: string): string {
+    if (status === "approved") return "APPROVED";
+    if (status === "failed_after_repairs") return "FAILED AFTER REPAIRS";
+    if (status === "vetoed") return "VETOED";
+    return status.toUpperCase();
+  }
+
+  function terminationLabel(reason: string): string {
+    const labels: Record<string, string> = {
+      simple_completed: "Completed (simple mode)",
+      sufficiency_reached: "Sufficiency target reached",
+      max_rounds_reached: "Maximum debate rounds reached",
+      stagnation_early_stop: "Stopped early (stagnation detected)",
+      budget_exhausted: "Budget exhausted",
+      completed_with_repairs: "Completed with repairs",
+      global_restart_exhausted: "Global restart limit reached",
+      validation_error: "Validation error",
+    };
+    return labels[reason] || reason;
+  }
+
   function toggleRec(id: string) {
     setExpandedRecs((prev) => {
       const next = new Set(prev);
@@ -610,10 +668,16 @@ export default function App() {
     const r = analysisResult;
     let text = "HIVEMIND STRATEGIC ANALYSIS REPORT\n";
     text += "=".repeat(40) + "\n\n";
-    text += `Debate rounds: ${r.debate_rounds} | Veto restarts: ${r.veto_restarts} | Units: ${r.theory_units_created} | Tokens: ${r.total_tokens} | Duration: ${(r.duration_ms / 1000).toFixed(1)}s\n\n`;
+    text += `Mode: ${r.mode_used} | Termination: ${terminationLabel(r.termination_reason)}\n`;
+    text += `Debate rounds: ${r.debate_rounds} | Restarts: ${r.veto_restarts} | Units: ${r.theory_units_created}\n`;
+    text += `Tokens: ${r.total_tokens} | LLM calls: ${r.budget_usage.llm_calls} | Duration: ${(r.duration_ms / 1000).toFixed(1)}s\n`;
+    if (r.repair_stats.recommendations_repaired > 0) {
+      text += `Repairs: ${r.repair_stats.recommendations_recovered} recovered, ${r.repair_stats.recommendations_failed_after_repairs} failed\n`;
+    }
+    text += "\n";
 
     text += "APPROVED RECOMMENDATIONS\n" + "-".repeat(30) + "\n\n";
-    for (const rec of r.recommendations) {
+    for (const rec of r.recommendations.filter(r => r.status === "approved")) {
       text += `[${Math.round(rec.average_feasibility)}/100] ${rec.title}\n`;
       text += `${rec.content}\n\n`;
       text += `Reasoning: ${rec.reasoning}\n\n`;
@@ -623,6 +687,15 @@ export default function App() {
         if (fs.mitigations.length) text += `    Mitigations: ${fs.mitigations.join("; ")}\n`;
       }
       text += "\n";
+    }
+
+    const failedRecs = r.recommendations.filter(r => r.status === "failed_after_repairs");
+    if (failedRecs.length) {
+      text += "FAILED AFTER REPAIRS\n" + "-".repeat(30) + "\n\n";
+      for (const rec of failedRecs) {
+        text += `[${Math.round(rec.average_feasibility)}/100] ${rec.title}\n`;
+        text += `${rec.content}\n\n`;
+      }
     }
 
     if (r.vetoed_solutions.length) {
@@ -650,10 +723,10 @@ export default function App() {
     if (phase === "login") return "Enter your username to connect to the Hivemind server.";
     if (phase === "login_fade_out") return "Connecting to Hivemind...";
     if (phase === "main") {
-      return `Set your problem, sufficiency value (${sufficiency}), and feasibility threshold (${feasibility}). Click Submit to run the analysis.`;
+      return `${analysisMode === "simple" ? "Simple" : "Full"} mode, ${effortLevel} effort. Set your problem and click Submit.`;
     }
     if (phase === "output") return analysisResult
-      ? `Analysis complete. ${analysisResult.recommendations.length} recommendations approved, ${analysisResult.vetoed_solutions.length} vetoed.`
+      ? `Analysis complete. ${analysisResult.recommendations.filter(r => r.status === "approved").length} approved, ${analysisResult.vetoed_solutions.length} vetoed. ${terminationLabel(analysisResult.termination_reason)}.`
       : "";
     // analysis phase
     switch (analysisStep) {
@@ -661,21 +734,23 @@ export default function App() {
         return "Initializing analysis stream...";
       case "theory_analyzing":
         return runNumber > 1
-          ? `Theory network restarting after veto (run ${runNumber}). Units are generating revised solutions using RAG-retrieved knowledge...`
-          : "Theory network units are generating initial solutions using RAG-retrieved knowledge from their assigned frameworks...";
+          ? `Theory network restarting (run ${runNumber}). Units generating revised solutions...`
+          : "Theory network units are generating initial solutions using RAG-retrieved knowledge...";
       case "monitor_aggregating":
-        return `Monitor is aggregating similar solutions. Round ${debateRound}, ${aggregatedCount} distinct conclusions so far.`;
+        return `Monitor is aggregating similar solutions. Round ${debateRound}, ${aggregatedCount} distinct conclusions.`;
       case "pass_to_practicality":
         return "Passing aggregated solutions to the practicality network for feasibility evaluation.";
       case "practicality_voting":
         return "Practicality agents are evaluating each solution's real-world feasibility (1-100).";
+      case "repairing":
+        return "Repairing low-feasibility recommendations to improve their scores...";
       case "veto":
-        return "Average feasibility below threshold. Solutions vetoed; theory network will restart.";
+        return "No recommendations passed threshold. Restarting analysis.";
       case "done":
         return analysisError
           ? `Analysis error: ${analysisError}`
           : analysisResult
-          ? `Analysis complete. ${analysisResult.recommendations.length} recommendations passed, ${analysisResult.vetoed_solutions.length} vetoed.`
+          ? `${terminationLabel(analysisResult.termination_reason)}. ${analysisResult.recommendations.filter(r => r.status === "approved").length} approved.`
           : "Processing...";
     }
   }
@@ -750,6 +825,51 @@ export default function App() {
                 />
               </div>
 
+              {/* Mode selector */}
+              <div className="input-block">
+                <label className="input-label">Analysis mode</label>
+                <div className="mode-selector">
+                  <button
+                    className={`mode-btn ${analysisMode === "simple" ? "active" : ""}`}
+                    onClick={() => setAnalysisMode("simple")}
+                  >
+                    Simple
+                  </button>
+                  <button
+                    className={`mode-btn ${analysisMode === "full" ? "active" : ""}`}
+                    onClick={() => setAnalysisMode("full")}
+                  >
+                    Full
+                  </button>
+                </div>
+                <div className="mode-description">
+                  {analysisMode === "simple"
+                    ? "Fast baseline: no debate rounds, quick feasibility check, lower cost."
+                    : "Deep synthesis: multi-round critique, per-recommendation repair, higher quality."}
+                </div>
+              </div>
+
+              {/* Effort selector */}
+              <div className="input-block">
+                <label className="input-label">Effort level</label>
+                <div className="mode-selector effort-selector">
+                  {(["low", "medium", "high"] as const).map((level) => (
+                    <button
+                      key={level}
+                      className={`mode-btn ${effortLevel === level ? "active" : ""}`}
+                      onClick={() => setEffortLevel(level)}
+                    >
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="mode-description">
+                  {effortLevel === "low" && "Minimal cost: 2 rounds max, 30 LLM calls cap."}
+                  {effortLevel === "medium" && "Balanced: 4 rounds max, 80 LLM calls cap."}
+                  {effortLevel === "high" && "Maximum quality: 6 rounds max, 160 LLM calls cap."}
+                </div>
+              </div>
+
               {/* Primary sliders */}
               <SliderWithInput
                 label="Sufficiency value"
@@ -773,19 +893,6 @@ export default function App() {
                 onChange={setFeasibility}
               />
 
-              {densityMode && (
-                <SliderWithInput
-                  label="Theory network density"
-                  value={density}
-                  min={500}
-                  max={50000}
-                  step={500}
-                  minLabel="500 tokens"
-                  maxLabel="50,000 tokens"
-                  onChange={setDensity}
-                />
-              )}
-
               {/* Advanced toggle */}
               <button
                 className="advanced-toggle"
@@ -796,6 +903,9 @@ export default function App() {
 
               <div className={`advanced-params ${showAdvanced ? "open" : ""}`}>
                 <div className="advanced-inner">
+                  {/* Experimental badge */}
+                  <div className="experimental-badge">EXPERIMENTAL</div>
+
                   {/* Density mode toggle */}
                   <div className="toggle-row">
                     <button
@@ -804,6 +914,19 @@ export default function App() {
                     />
                     <span className="toggle-label">Dynamic density mode</span>
                   </div>
+
+                  {densityMode && (
+                    <SliderWithInput
+                      label="Theory network density"
+                      value={density}
+                      min={500}
+                      max={50000}
+                      step={500}
+                      minLabel="500 tokens"
+                      maxLabel="50,000 tokens"
+                      onChange={setDensity}
+                    />
+                  )}
 
                   <SliderWithInput
                     label="Similarity threshold"
@@ -868,7 +991,7 @@ export default function App() {
                     </select>
                   </div>
 
-                  {/* Agent selection (only when not in density mode for theory) */}
+                  {/* Agent selection */}
                   {!densityMode && theoryAgents.length > 0 && (
                     <div className="input-block">
                       <label className="input-label">Theory agents</label>
@@ -976,6 +1099,9 @@ export default function App() {
           <div className="main-header analysis-header">
             <span className="main-brand">HIVEMIND</span>
             <span className="main-badge">ANALYSIS</span>
+            <span className="main-badge" style={{ borderColor: analysisMode === "full" ? "#00bfff" : "#7fba00" }}>
+              {analysisMode.toUpperCase()}
+            </span>
             {runNumber > 1 && (
               <span className="main-badge" style={{ borderColor: "#ff2a2a", color: "#ff2a2a" }}>
                 RUN {runNumber}
@@ -1048,6 +1174,11 @@ export default function App() {
                     </div>
                   </>
                 )}
+                {analysisStep === "repairing" && (
+                  <div className="monitor-status repair-status">
+                    Repairing low-feasibility recommendations...
+                  </div>
+                )}
                 {(analysisStep === "pass_to_practicality" || analysisStep === "practicality_voting") && (
                   <div className="monitor-drifting">Passing to practicality network...</div>
                 )}
@@ -1055,6 +1186,7 @@ export default function App() {
                   <>
                     {analysisResult.recommendations.map((rec, i) => (
                       <div key={i} className="monitor-conclusion">
+                        <span className={`rec-status-dot ${rec.status}`} />
                         {rec.title}
                       </div>
                     ))}
@@ -1109,9 +1241,9 @@ export default function App() {
           {/* Veto overlay */}
           {showVeto && (
             <div className="veto-overlay">
-              <div className="veto-box">VETO</div>
+              <div className="veto-box">RESTART</div>
               <div className="veto-caption">
-                Feasibility below threshold — restarting analysis
+                No recommendations passed threshold — restarting analysis
               </div>
             </div>
           )}
@@ -1139,32 +1271,63 @@ export default function App() {
               </button>
             </div>
             <div className="output-body">
+              {/* Termination reason */}
+              <div className="termination-banner">
+                {terminationLabel(analysisResult.termination_reason)}
+              </div>
+
               {/* Stats bar */}
               <div className="stats-bar">
                 <span className="stat-item">
-                  <span className="stat-value">{analysisResult.debate_rounds}</span> rounds
+                  <span className="stat-label">Mode</span>
+                  <span className="stat-value">{analysisResult.mode_used}</span>
                 </span>
                 <span className="stat-item">
-                  <span className="stat-value">{analysisResult.veto_restarts}</span> restarts
+                  <span className="stat-label">Rounds</span>
+                  <span className="stat-value">{analysisResult.debate_rounds}</span>
                 </span>
                 <span className="stat-item">
-                  <span className="stat-value">{analysisResult.theory_units_created}</span> units
+                  <span className="stat-label">LLM calls</span>
+                  <span className="stat-value">{analysisResult.budget_usage.llm_calls}</span>
                 </span>
                 <span className="stat-item">
-                  <span className="stat-value">{analysisResult.total_tokens.toLocaleString()}</span> tokens
+                  <span className="stat-label">Tokens</span>
+                  <span className="stat-value">{analysisResult.total_tokens.toLocaleString()}</span>
                 </span>
                 <span className="stat-item">
-                  <span className="stat-value">{(analysisResult.duration_ms / 1000).toFixed(1)}</span>s
+                  <span className="stat-label">Duration</span>
+                  <span className="stat-value">{(analysisResult.duration_ms / 1000).toFixed(1)}s</span>
                 </span>
               </div>
+
+              {/* Repair summary */}
+              {analysisResult.repair_stats.recommendations_repaired > 0 && (
+                <div className="repair-summary">
+                  <span className="repair-summary-label">Repairs:</span>
+                  <span className="repair-stat recovered">
+                    {analysisResult.repair_stats.recommendations_recovered} recovered
+                  </span>
+                  {analysisResult.repair_stats.recommendations_failed_after_repairs > 0 && (
+                    <span className="repair-stat failed">
+                      {analysisResult.repair_stats.recommendations_failed_after_repairs} failed
+                    </span>
+                  )}
+                  <span className="repair-stat iterations">
+                    {analysisResult.repair_stats.total_repair_iterations} iterations
+                  </span>
+                </div>
+              )}
 
               {/* Approved recommendations */}
               {analysisResult.recommendations.length > 0 && (
                 <div>
-                  <h3 className="rec-section-title">Approved Recommendations</h3>
+                  <h3 className="rec-section-title">Recommendations</h3>
                   {analysisResult.recommendations.map((rec) => (
-                    <div key={rec.id} className="recommendation-card">
+                    <div key={rec.id} className={`recommendation-card ${rec.status === "failed_after_repairs" ? "failed-card" : ""}`}>
                       <div className="rec-header" onClick={() => toggleRec(rec.id)}>
+                        <span className={`rec-status-badge ${rec.status}`}>
+                          {statusLabel(rec.status)}
+                        </span>
                         <span className="rec-title">{rec.title}</span>
                         <span className={`rec-score ${scoreClass(rec.average_feasibility)}`}>
                           {Math.round(rec.average_feasibility)}/100
@@ -1183,6 +1346,18 @@ export default function App() {
                             <span className="rec-body-label">Reasoning</span>
                             <div className="rec-body-text">{rec.reasoning}</div>
                           </div>
+                          {rec.repair_history && rec.repair_history.length > 0 && (
+                            <div className="rec-body-section">
+                              <span className="rec-body-label">Repair History</span>
+                              <div className="repair-history-list">
+                                {rec.repair_history.map((rh, idx) => (
+                                  <div key={idx} className="repair-history-item">
+                                    <span>Iteration {rh.iteration}: {Math.round(rh.score_before)} → {Math.round(rh.score_after)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           {rec.feasibility_scores.length > 0 && (
                             <div className="rec-body-section">
                               <span className="rec-body-label">Feasibility Scores</span>
@@ -1227,6 +1402,7 @@ export default function App() {
                   {analysisResult.vetoed_solutions.map((rec) => (
                     <div key={rec.id} className="recommendation-card">
                       <div className="rec-header" onClick={() => toggleRec(rec.id)}>
+                        <span className="rec-status-badge vetoed">VETOED</span>
                         <span className="rec-title">{rec.title}</span>
                         <span className={`rec-score ${scoreClass(rec.average_feasibility)}`}>
                           {Math.round(rec.average_feasibility)}/100

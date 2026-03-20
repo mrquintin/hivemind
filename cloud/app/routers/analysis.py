@@ -19,8 +19,10 @@ from app.models.knowledge_base import KnowledgeBase
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResultOut,
+    BudgetUsageOut,
     FeasibilityScoreOut,
     RecommendationOut,
+    RepairStatsOut,
 )
 from hivemind_core import HivemindInput
 from hivemind_core.types import ContextItem, ContextType
@@ -89,7 +91,7 @@ def _recommendation_to_out(rec) -> RecommendationOut:
         )
         for fs in (rec.feasibility_scores or [])
     ]
-    
+
     return RecommendationOut(
         id=rec.id,
         title=rec.title,
@@ -99,6 +101,9 @@ def _recommendation_to_out(rec) -> RecommendationOut:
         retrieved_chunk_ids=rec.retrieved_chunk_ids,
         feasibility_scores=feasibility_scores,
         average_feasibility=rec.average_feasibility,
+        status=getattr(rec, "status", "approved"),
+        repair_history=getattr(rec, "repair_history", []),
+        partial_scoring=getattr(rec, "partial_scoring", False),
     )
 
 
@@ -116,19 +121,56 @@ def _audit_event_to_dict(event) -> dict[str, Any]:
     }
 
 
+def _build_hivemind_input(
+    payload: AnalysisRequest,
+    theory_ids: list[str],
+    practicality_ids: list[str],
+    context: list[ContextItem],
+) -> HivemindInput:
+    """Map AnalysisRequest to HivemindInput with backward compatibility."""
+    return HivemindInput(
+        query=payload.problem_statement,
+        context=context,
+        theory_agent_ids=theory_ids,
+        practicality_agent_ids=practicality_ids,
+        analysis_mode=payload.analysis_mode,
+        effort_level=payload.effort_level,
+        sufficiency_value=payload.sufficiency_value,
+        feasibility_threshold=payload.feasibility_threshold,
+        max_total_llm_calls=payload.max_total_llm_calls,
+        max_total_tokens=payload.max_total_tokens,
+        max_wallclock_ms=payload.max_wallclock_ms,
+        max_repair_iterations=payload.max_repair_iterations,
+        theory_network_density=payload.theory_network_density,
+        max_veto_restarts=payload.max_veto_restarts,
+        similarity_threshold=payload.similarity_threshold,
+        revision_strength=payload.revision_strength,
+        practicality_criticality=payload.practicality_criticality,
+    )
+
+
+def _budget_usage_to_out(bu) -> BudgetUsageOut:
+    return BudgetUsageOut(
+        llm_calls=bu.llm_calls,
+        input_tokens=bu.input_tokens,
+        output_tokens=bu.output_tokens,
+        total_tokens=bu.total_tokens,
+        wallclock_ms=bu.wallclock_ms,
+    )
+
+
+def _repair_stats_to_out(rs) -> RepairStatsOut:
+    return RepairStatsOut(
+        recommendations_repaired=rs.recommendations_repaired,
+        recommendations_recovered=rs.recommendations_recovered,
+        recommendations_failed_after_repairs=rs.recommendations_failed_after_repairs,
+        total_repair_iterations=rs.total_repair_iterations,
+    )
+
+
 @router.post("/run", response_model=AnalysisResultOut)
 def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
-    """Run a strategic analysis using the Hivemind Core engine.
-    
-    This endpoint implements the full Hivemind workflow:
-    1. Creates theory network units (dynamic if density specified)
-    2. Units generate initial solutions
-    3. Units critique and revise each other's solutions
-    4. Monitor aggregates similar solutions
-    5. Practicality network evaluates solutions
-    6. Veto mechanism can restart entire process if needed
-    """
-    # Resolve agents by use_case_profile / decision_type when provided
+    """Run a strategic analysis using the Hivemind Core engine."""
     theory_ids, practicality_ids = _resolve_agents_by_profile_and_decision(
         db,
         payload.use_case_profile,
@@ -137,46 +179,28 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
         list(payload.enabled_practicality_agent_ids),
     )
 
-    # Allow running with density-based dynamic units OR specified agents
     if not theory_ids and payload.theory_network_density is None:
         raise HTTPException(
             status_code=400,
             detail="Either theory agents or theory_network_density must be specified (or set decision_type / use_case_profile with matching data)",
         )
 
-    # Build context from client-cleared text
     context: list[ContextItem] = [
         ContextItem(type=ContextType.TEXT, content=text, source="client")
         for text in (payload.context_document_texts or [])
         if (text and isinstance(text, str) and text.strip())
     ]
 
-    # Create engine and run analysis
     engine = create_engine(db)
     start = time.time()
 
-    hivemind_input = HivemindInput(
-        query=payload.problem_statement,
-        context=context,
-        theory_agent_ids=theory_ids,
-        practicality_agent_ids=practicality_ids,
-        sufficiency_value=payload.sufficiency_value,
-        feasibility_threshold=payload.feasibility_threshold,
-        theory_network_density=payload.theory_network_density,
-        max_veto_restarts=payload.max_veto_restarts,
-        similarity_threshold=payload.similarity_threshold,
-        revision_strength=payload.revision_strength,
-        practicality_criticality=payload.practicality_criticality,
-    )
-
+    hivemind_input = _build_hivemind_input(payload, theory_ids, practicality_ids, context)
     output = engine.analyze(hivemind_input)
-    
-    # Convert to response format
+
     recommendations = [_recommendation_to_out(rec) for rec in output.recommendations]
     vetoed = [_recommendation_to_out(rec) for rec in output.vetoed_solutions]
     audit_trail = [_audit_event_to_dict(event) for event in output.audit_trail]
-    
-    # Store result
+
     analysis = AnalysisResult(
         request=payload.model_dump(),
         recommendations=[r.model_dump() for r in recommendations],
@@ -189,7 +213,7 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
     db.add(analysis)
     db.commit()
     db.refresh(analysis)
-    
+
     return AnalysisResultOut(
         id=analysis.id,
         recommendations=recommendations,
@@ -200,6 +224,10 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
         theory_units_created=output.theory_units_created,
         total_tokens=output.total_tokens,
         duration_ms=output.duration_ms,
+        termination_reason=output.termination_reason,
+        budget_usage=_budget_usage_to_out(output.budget_usage),
+        mode_used=output.mode_used,
+        repair_stats=_repair_stats_to_out(output.repair_stats),
     )
 
 
@@ -226,23 +254,10 @@ async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends
     ]
 
     engine = create_engine(db)
-
-    hivemind_input = HivemindInput(
-        query=payload.problem_statement,
-        context=context,
-        theory_agent_ids=theory_ids,
-        practicality_agent_ids=practicality_ids,
-        sufficiency_value=payload.sufficiency_value,
-        feasibility_threshold=payload.feasibility_threshold,
-        theory_network_density=payload.theory_network_density,
-        max_veto_restarts=payload.max_veto_restarts,
-        similarity_threshold=payload.similarity_threshold,
-        revision_strength=payload.revision_strength,
-        practicality_criticality=payload.practicality_criticality,
-    )
+    hivemind_input = _build_hivemind_input(payload, theory_ids, practicality_ids, context)
 
     import json
-    
+
     def _serialize(obj):
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
             return dataclasses.asdict(obj)
@@ -255,11 +270,11 @@ async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends
         if hasattr(obj, 'value'):
             return obj.value
         return obj
-    
+
     def generate():
         for event in engine.analyze_streaming(hivemind_input):
             yield f"data: {json.dumps(_serialize(event))}\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",

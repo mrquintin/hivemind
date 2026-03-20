@@ -110,7 +110,7 @@ The Client uses a Bloomberg Terminal-inspired design:
 | **Xcode CLT** | Required for compilation | `xcode-select --install` |
 | **Node.js 18+** | Builds the React frontend | https://nodejs.org |
 | **Rust** | Builds the native backend | https://rustup.rs |
-| **Cloud server running** | Client connects to the API | Deploy it with `AWS_GUIDE.md` |
+| **Cloud server running** | Client connects to the API | Deploy it with `docs/AWS_GUIDE.md` (from repo root) |
 
 ### Running from Source
 

@@ -1,27 +1,29 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class AnalysisRequest(BaseModel):
     """Request to run a strategic analysis.
-    
+
     Attributes:
         problem_statement: Textual description of the problem to analyze.
-        context_documents: Additional document IDs to include as context.
+        analysis_mode: "simple" (default) or "full".
+        effort_level: "low", "medium" (default), or "high".
         sufficiency_value: Target number of aggregate conclusions (1-10).
-            The debate process continues until unique conclusions <= this value.
-        feasibility_threshold: 1-100 threshold for practicality veto.
-            If avg feasibility across all practicality agents <= this value,
-            the entire solution list is vetoed and theory network restarts.
-        theory_network_density: Token count per theory unit for dynamic distribution.
-            When set, knowledge base documents are distributed across dynamically
-            created units. When None, uses the specified theory agents directly.
-        enabled_theory_agent_ids: Specific theory agent IDs to use (when not using density).
-        enabled_practicality_agent_ids: Practicality agent IDs for feasibility evaluation.
-        max_veto_restarts: Max times theory network can restart after veto (default 3).
+        feasibility_threshold: 1-100 threshold for practicality pass/fail.
     """
     problem_statement: str
+    analysis_mode: str = Field(
+        default="simple",
+        description='Execution mode: "simple" (fast baseline) or "full" (deeper synthesis)',
+    )
+    effort_level: str = Field(
+        default="medium",
+        description='Effort tier: "low", "medium", or "high"',
+    )
     context_documents: list[str] = Field(default_factory=list)
     context_document_texts: list[str] = Field(
         default_factory=list,
@@ -29,18 +31,40 @@ class AnalysisRequest(BaseModel):
     )
     sufficiency_value: int = Field(default=1, ge=1, le=10)
     feasibility_threshold: int = Field(default=80, ge=1, le=100)
+
+    # Budget overrides (optional — effort_level provides defaults)
+    max_total_llm_calls: int | None = Field(default=None, description="Hard cap on LLM calls")
+    max_total_tokens: int | None = Field(default=None, description="Hard cap on total tokens")
+    max_wallclock_ms: int | None = Field(default=None, description="Hard cap on wall-clock ms")
+    max_repair_iterations: int = Field(default=2, ge=0, le=10)
+
+    # Legacy fields — kept optional for backward compatibility
     theory_network_density: int | None = Field(
         default=None,
         description="Token count per theory unit for dynamic KB distribution"
     )
     enabled_theory_agent_ids: list[str] = Field(default_factory=list)
     enabled_practicality_agent_ids: list[str] = Field(default_factory=list)
-    max_veto_restarts: int = Field(default=3, ge=1, le=10)
+    max_veto_restarts: int = Field(default=3, ge=0, le=10)
     similarity_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     revision_strength: float = Field(default=0.5, ge=0.0, le=1.0)
     practicality_criticality: float = Field(default=0.5, ge=0.0, le=1.0)
-    use_case_profile: str | None = Field(default=None, description="Resolve practicality agents by profile (e.g. small_business, individual_career)")
-    decision_type: str | None = Field(default=None, description="Resolve strategic KBs/theory agents by decision type (e.g. market_entry, m_and_a)")
+    use_case_profile: str | None = Field(default=None, description="Resolve practicality agents by profile")
+    decision_type: str | None = Field(default=None, description="Resolve theory agents by decision type")
+
+    @field_validator("analysis_mode")
+    @classmethod
+    def validate_analysis_mode(cls, v: str) -> str:
+        if v not in ("simple", "full"):
+            raise ValueError(f'analysis_mode must be "simple" or "full", got "{v}"')
+        return v
+
+    @field_validator("effort_level")
+    @classmethod
+    def validate_effort_level(cls, v: str) -> str:
+        if v not in ("low", "medium", "high"):
+            raise ValueError(f'effort_level must be "low", "medium", or "high", got "{v}"')
+        return v
 
 
 class AgentExecutionOut(BaseModel):
@@ -73,6 +97,24 @@ class RecommendationOut(BaseModel):
     retrieved_chunk_ids: list[str] = Field(default_factory=list)
     feasibility_scores: list[FeasibilityScoreOut] = Field(default_factory=list)
     average_feasibility: float = 0.0
+    status: str = "approved"
+    repair_history: list[dict[str, Any]] = Field(default_factory=list)
+    partial_scoring: bool = False
+
+
+class BudgetUsageOut(BaseModel):
+    llm_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    wallclock_ms: int = 0
+
+
+class RepairStatsOut(BaseModel):
+    recommendations_repaired: int = 0
+    recommendations_recovered: int = 0
+    recommendations_failed_after_repairs: int = 0
+    total_repair_iterations: int = 0
 
 
 class AnalysisResultOut(BaseModel):
@@ -85,3 +127,7 @@ class AnalysisResultOut(BaseModel):
     theory_units_created: int = 0
     total_tokens: int = 0
     duration_ms: int = 0
+    termination_reason: str = ""
+    budget_usage: BudgetUsageOut = Field(default_factory=BudgetUsageOut)
+    mode_used: str = "simple"
+    repair_stats: RepairStatsOut = Field(default_factory=RepairStatsOut)

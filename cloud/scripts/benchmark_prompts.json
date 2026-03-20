@@ -1,0 +1,82 @@
+[
+  {
+    "category": "market_entry",
+    "prompt": "Should our mid-size SaaS company expand into the Japanese enterprise market, and what entry strategy would minimize risk while maximizing first-mover advantage?"
+  },
+  {
+    "category": "market_entry",
+    "prompt": "We are a European electric vehicle battery manufacturer considering entering the North American market. What partnerships, regulatory, and supply chain factors should guide our market entry?"
+  },
+  {
+    "category": "market_entry",
+    "prompt": "Our fintech startup has gained traction in Southeast Asia. Should we enter the Indian market next, or focus on deepening penetration in existing markets?"
+  },
+  {
+    "category": "market_entry",
+    "prompt": "A boutique consulting firm wants to expand from the UK into the Middle East. What cultural, regulatory, and competitive factors should shape the entry plan?"
+  },
+  {
+    "category": "market_entry",
+    "prompt": "Our agricultural technology platform is considering launching in sub-Saharan Africa. What infrastructure, distribution, and partnership strategies should we prioritize?"
+  },
+  {
+    "category": "m_and_a",
+    "prompt": "Should our $500M revenue healthcare company acquire a smaller telehealth startup valued at $80M, or build equivalent capabilities in-house over 18 months?"
+  },
+  {
+    "category": "m_and_a",
+    "prompt": "We are evaluating the acquisition of a competitor that would give us 35% market share. What antitrust, integration, and retention risks should we model?"
+  },
+  {
+    "category": "m_and_a",
+    "prompt": "A private equity firm is considering a roll-up strategy in the fragmented pest control industry. What valuation multiples, synergy assumptions, and integration playbook should guide the first three acquisitions?"
+  },
+  {
+    "category": "m_and_a",
+    "prompt": "Our enterprise software company has been approached by a larger competitor for acquisition at 8x revenue. Should we accept, counter, or remain independent?"
+  },
+  {
+    "category": "m_and_a",
+    "prompt": "We need to divest a underperforming division that accounts for 20% of revenue but consumes 35% of management attention. What divestiture strategy maximizes enterprise value?"
+  },
+  {
+    "category": "pricing",
+    "prompt": "Our B2B SaaS product currently uses per-seat pricing. Should we switch to usage-based pricing, and how should we manage the transition without churning existing customers?"
+  },
+  {
+    "category": "pricing",
+    "prompt": "We are launching a premium tier of our consumer subscription service. How should we price it relative to the existing $9.99/month plan to maximize ARPU without cannibalizing the base?"
+  },
+  {
+    "category": "pricing",
+    "prompt": "Our commodity chemical business is losing margin due to price wars. Should we pursue a cost leadership strategy or differentiate into specialty chemicals with higher margins?"
+  },
+  {
+    "category": "pricing",
+    "prompt": "We operate a two-sided marketplace. How should we balance take rates between buyers and sellers when sellers have multiple alternative platforms?"
+  },
+  {
+    "category": "pricing",
+    "prompt": "Our professional services firm charges hourly rates. Should we transition to value-based pricing for our top 20% of engagements, and what change management approach is needed?"
+  },
+  {
+    "category": "business_model_change",
+    "prompt": "Our traditional media company generates 80% of revenue from advertising. Should we pivot to a subscription-first model, and what timeline and milestones should we set?"
+  },
+  {
+    "category": "business_model_change",
+    "prompt": "We are a hardware manufacturer considering a shift to hardware-as-a-service. What are the financial implications for cash flow, and how do we manage the transition period?"
+  },
+  {
+    "category": "business_model_change",
+    "prompt": "Our retail chain is evaluating whether to close 40% of physical stores and shift to an online-first model with selective showrooms. What customer, operational, and financial factors should drive this decision?"
+  },
+  {
+    "category": "business_model_change",
+    "prompt": "A traditional bank is considering launching a standalone neobank brand targeting Gen Z. Should it be a separate entity or integrated with the parent brand?"
+  },
+  {
+    "category": "business_model_change",
+    "prompt": "Our logistics company currently owns its fleet. Should we transition to an asset-light model using independent contractors, and what quality/compliance risks does this introduce?"
+  }
+]

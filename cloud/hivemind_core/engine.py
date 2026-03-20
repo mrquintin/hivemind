@@ -29,7 +29,7 @@ class HivemindEngine:
 
     Example usage:
         >>> engine = HivemindEngine(llm=llm, vector_store=vs, storage=storage)
-        >>> input_data = HivemindInput(query="Should we expand to Europe?", ...)
+        >>> input_data = HivemindInput(query="Should we expand to Europe?", analysis_mode="simple")
         >>> output = engine.analyze(input_data)
     """
 
@@ -39,13 +39,6 @@ class HivemindEngine:
         vector_store: VectorStoreInterface,
         storage: StorageInterface,
     ):
-        """Initialize the Hivemind engine.
-
-        Args:
-            llm: LLM interface for AI calls
-            vector_store: Vector store for RAG retrieval
-            storage: Storage interface for agents and simulations
-        """
         self.llm = llm
         self.vector_store = vector_store
         self.storage = storage
@@ -55,14 +48,11 @@ class HivemindEngine:
         input_data: HivemindInput,
         max_debate_rounds: int = 5,
     ) -> HivemindOutput:
-        """Run a full strategic analysis with the debate engine.
+        """Run a strategic analysis with the debate engine.
 
-        Args:
-            input_data: The input query and configuration
-            max_debate_rounds: Maximum debate iterations
-
-        Returns:
-            HivemindOutput with recommendations and audit trail
+        Mode and effort are controlled via input_data.analysis_mode and
+        input_data.effort_level. The max_debate_rounds parameter is kept
+        for backward compatibility but is superseded by effort_level defaults.
         """
         return run_debate(
             input_data=input_data,
@@ -77,9 +67,10 @@ class HivemindEngine:
         input_data: HivemindInput,
         max_debate_rounds: int = 5,
     ):
-        """Run analysis and yield progress events (debate_start, initial_solutions, round_start, complete, etc.).
+        """Run analysis and yield progress events.
 
-        Yields event dicts. The final event has type "complete" and includes "output": HivemindOutput.
+        Yields event dicts. The final event has type "complete" and
+        includes "output": HivemindOutput.
         """
         yield from run_debate_streaming(
             input_data=input_data,
@@ -94,17 +85,7 @@ class HivemindEngine:
         agent: AgentDefinition,
         query: str,
     ) -> tuple[AgentExecutionResult, AuditEvent]:
-        """Execute a single agent without the full debate process.
-
-        Useful for testing agents or simple single-agent queries.
-
-        Args:
-            agent: The agent definition
-            query: The problem statement
-
-        Returns:
-            Tuple of (AgentExecutionResult, AuditEvent)
-        """
+        """Execute a single agent without the full debate process."""
         return execute_agent(
             agent=agent,
             query=query,
@@ -118,15 +99,7 @@ class HivemindEngine:
         formula: SimulationFormula,
         inputs: dict,
     ) -> dict:
-        """Run a simulation formula with given inputs.
-
-        Args:
-            formula: The simulation formula definition
-            inputs: Input values for the formula
-
-        Returns:
-            Dict with 'outputs' and 'variables'
-        """
+        """Run a simulation formula with given inputs."""
         return run_simulation(formula, inputs)
 
     def get_agent(self, agent_id: str) -> AgentDefinition | None:
@@ -148,18 +121,7 @@ def create_engine(
     vector_store: VectorStoreInterface,
     storage: StorageInterface,
 ) -> HivemindEngine:
-    """Create a HivemindEngine with Claude as the LLM.
-
-    This is a convenience factory for the most common setup.
-
-    Args:
-        anthropic_api_key: Anthropic API key for Claude
-        vector_store: Vector store implementation
-        storage: Storage implementation
-
-    Returns:
-        Configured HivemindEngine instance
-    """
+    """Create a HivemindEngine with Claude as the LLM."""
     from hivemind_core.llm import ClaudeLLM
 
     llm = ClaudeLLM(api_key=anthropic_api_key)

@@ -12,7 +12,7 @@ This repo now keeps the server on an AWS-oriented deployment path only.
 
 Use these docs first:
 
-- `../AWS_GUIDE.md`
+- `../docs/AWS_GUIDE.md`
 - `docs/AWS_DEPLOYMENT.md`
 
 ## Quick Start

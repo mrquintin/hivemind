@@ -54,10 +54,16 @@ export interface Agent {
 
 export interface AnalysisRequest {
   problem_statement: string;
+  analysis_mode?: "simple" | "full";
+  effort_level?: "low" | "medium" | "high";
   context_documents?: string[];
   context_document_texts?: string[];
   sufficiency_value?: number;
   feasibility_threshold?: number;
+  max_total_llm_calls?: number | null;
+  max_total_tokens?: number | null;
+  max_wallclock_ms?: number | null;
+  max_repair_iterations?: number;
   theory_network_density?: number | null;
   enabled_theory_agent_ids?: string[];
   enabled_practicality_agent_ids?: string[];
@@ -83,6 +89,13 @@ export interface FeasibilityScore {
   reasoning: string;
 }
 
+export interface RepairHistoryEntry {
+  iteration: number;
+  feedback_summary: string;
+  score_before: number;
+  score_after: number;
+}
+
 export interface Recommendation {
   id: string;
   title: string;
@@ -92,6 +105,8 @@ export interface Recommendation {
   retrieved_chunk_ids: string[];
   feasibility_scores: FeasibilityScore[];
   average_feasibility: number;
+  status: "approved" | "vetoed" | "failed_after_repairs";
+  repair_history: RepairHistoryEntry[];
 }
 
 export interface AuditEvent {
@@ -104,6 +119,21 @@ export interface AuditEvent {
   latency_ms?: number;
 }
 
+export interface BudgetUsage {
+  llm_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  wallclock_ms: number;
+}
+
+export interface RepairStats {
+  recommendations_repaired: number;
+  recommendations_recovered: number;
+  recommendations_failed_after_repairs: number;
+  total_repair_iterations: number;
+}
+
 export interface AnalysisResult {
   id: string;
   recommendations: Recommendation[];
@@ -114,6 +144,10 @@ export interface AnalysisResult {
   theory_units_created: number;
   total_tokens: number;
   duration_ms: number;
+  termination_reason: string;
+  budget_usage: BudgetUsage;
+  mode_used: string;
+  repair_stats: RepairStats;
 }
 
 export interface AuthResponse {
@@ -219,18 +253,20 @@ export async function syncAgents(): Promise<{ agents: Agent[]; synced_at: string
 
 /**
  * Start a new strategic analysis.
- * 
- * @param req - Analysis request with problem statement and configuration
- * @returns The analysis result with recommendations and audit trail
  */
 export async function startAnalysis(req: AnalysisRequest): Promise<AnalysisResult> {
-  // Map to the new API format (forward all analysis parameters per DEVELOPMENT_PLAN)
   const payload = {
     problem_statement: req.problem_statement,
+    analysis_mode: req.analysis_mode ?? "simple",
+    effort_level: req.effort_level ?? "medium",
     context_documents: req.context_documents ?? [],
     context_document_texts: req.context_document_texts ?? [],
     sufficiency_value: req.sufficiency_value ?? 1,
     feasibility_threshold: req.feasibility_threshold ?? 80,
+    ...(req.max_total_llm_calls != null && { max_total_llm_calls: req.max_total_llm_calls }),
+    ...(req.max_total_tokens != null && { max_total_tokens: req.max_total_tokens }),
+    ...(req.max_wallclock_ms != null && { max_wallclock_ms: req.max_wallclock_ms }),
+    max_repair_iterations: req.max_repair_iterations ?? 2,
     theory_network_density: req.theory_network_density ?? null,
     enabled_theory_agent_ids: req.enabled_theory_agent_ids ?? req.theory_agent_ids ?? [],
     enabled_practicality_agent_ids: req.enabled_practicality_agent_ids ?? req.practicality_agent_ids ?? [],
@@ -284,10 +320,16 @@ export function startAnalysisStreaming(
 
   const payload = {
     problem_statement: req.problem_statement,
+    analysis_mode: req.analysis_mode ?? "simple",
+    effort_level: req.effort_level ?? "medium",
     context_documents: req.context_documents ?? [],
     context_document_texts: req.context_document_texts ?? [],
     sufficiency_value: req.sufficiency_value ?? 1,
     feasibility_threshold: req.feasibility_threshold ?? 80,
+    ...(req.max_total_llm_calls != null && { max_total_llm_calls: req.max_total_llm_calls }),
+    ...(req.max_total_tokens != null && { max_total_tokens: req.max_total_tokens }),
+    ...(req.max_wallclock_ms != null && { max_wallclock_ms: req.max_wallclock_ms }),
+    max_repair_iterations: req.max_repair_iterations ?? 2,
     theory_network_density: req.theory_network_density ?? null,
     enabled_theory_agent_ids: req.enabled_theory_agent_ids ?? req.theory_agent_ids ?? [],
     enabled_practicality_agent_ids: req.enabled_practicality_agent_ids ?? req.practicality_agent_ids ?? [],
@@ -372,7 +414,6 @@ export function connectToAnalysisStream(
   analysisId: string,
   callbacks: StreamCallbacks
 ): WebSocket {
-  // Handle both http->ws and https->wss conversions
   const wsUrl = API_URL.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
   const ws = new WebSocket(`${wsUrl}/ws/analysis/${analysisId}`);
 
@@ -441,7 +482,6 @@ export async function checkServerHealth(): Promise<{ status: string; version: st
         return { ...data, connected: true };
       }
     } catch {
-      // Try next URL
       continue;
     }
   }

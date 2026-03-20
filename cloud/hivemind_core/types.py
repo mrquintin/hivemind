@@ -40,6 +40,91 @@ class AgentStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class AnalysisMode(str, Enum):
+    SIMPLE = "simple"
+    FULL = "full"
+
+
+class EffortLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class TerminationReason(str, Enum):
+    # Simple mode
+    SIMPLE_COMPLETED = "simple_completed"
+    # Full mode
+    SUFFICIENCY_REACHED = "sufficiency_reached"
+    MAX_ROUNDS_REACHED = "max_rounds_reached"
+    STAGNATION_EARLY_STOP = "stagnation_early_stop"
+    COMPLETED_WITH_REPAIRS = "completed_with_repairs"
+    GLOBAL_RESTART_EXHAUSTED = "global_restart_exhausted"
+    # Shared
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    VALIDATION_ERROR = "validation_error"
+
+
+class RecommendationStatus(str, Enum):
+    APPROVED = "approved"
+    VETOED = "vetoed"
+    FAILED_AFTER_REPAIRS = "failed_after_repairs"
+
+
+# ---------------------------------------------------------------------------
+# Effort-level defaults
+# ---------------------------------------------------------------------------
+
+EFFORT_DEFAULTS: dict[str, dict[str, int]] = {
+    "low": {
+        "max_rounds": 2,
+        "max_repair_iterations": 1,
+        "max_total_llm_calls": 30,
+    },
+    "medium": {
+        "max_rounds": 4,
+        "max_repair_iterations": 2,
+        "max_total_llm_calls": 80,
+    },
+    "high": {
+        "max_rounds": 6,
+        "max_repair_iterations": 3,
+        "max_total_llm_calls": 160,
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Budget tracking
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BudgetUsage:
+    """Tracks resource consumption during an analysis run."""
+
+    llm_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    wallclock_ms: int = 0
+
+
+@dataclass
+class RepairStats:
+    """Statistics about the recommendation repair process."""
+
+    recommendations_repaired: int = 0
+    recommendations_recovered: int = 0
+    recommendations_failed_after_repairs: int = 0
+    total_repair_iterations: int = 0
+
+
+class BudgetExhausted(Exception):
+    """Raised when a budget ceiling is exceeded."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Input Types
 # ---------------------------------------------------------------------------
@@ -59,26 +144,28 @@ class ContextItem:
 @dataclass
 class HivemindInput:
     """Standard input to the Hivemind engine.
-    
+
     Attributes:
         query: Textual description of the problem to analyze.
         context: Additional context items (documents, sensor data, etc.).
         agent_ids: Legacy field for backward compatibility.
-        theory_agent_ids: Specific theory agent IDs to use (if not using density-based distribution).
+        theory_agent_ids: Specific theory agent IDs to use.
         practicality_agent_ids: Practicality agent IDs for feasibility evaluation.
-        sufficiency_value: Target number of aggregate conclusions. The debate process
-            continues until the number of unique aggregated conclusions drops to or
-            below this value.
-        feasibility_threshold: 1-100 threshold. If the average feasibility score across
-            all practicality agents is equal to or lower than this value, the entire
-            solution list is vetoed and the theory network must restart from scratch.
-        theory_network_density: Token count target per theory network unit. Determines
-            how knowledge base documents are distributed across dynamically created
-            units. Range: min_doc_tokens to sum_all_doc_tokens. When set, the system
-            will create units dynamically based on this value rather than using
-            pre-defined theory agents.
-        max_veto_restarts: Maximum number of times the theory network can restart
-            after a veto before giving up. Default is 3.
+        analysis_mode: "simple" (default) or "full".
+        effort_level: "low", "medium" (default), or "high".
+        sufficiency_value: Target number of aggregate conclusions.
+        feasibility_threshold: 1-100 threshold for feasibility pass/fail.
+        max_total_llm_calls: Hard cap on LLM calls (None = use effort default).
+        max_total_tokens: Hard cap on total tokens (None = unlimited).
+        max_wallclock_ms: Hard cap on wall-clock time (None = unlimited).
+        max_repair_iterations: Max repair attempts per failed recommendation.
+        stagnation_window_rounds: Rounds to look back for improvement.
+        min_aggregation_improvement: Min reduction in aggregated count to avoid stagnation.
+        theory_network_density: Token count per theory unit for dynamic distribution.
+        max_veto_restarts: Max global restarts (full mode only, capped at 1 by default).
+        similarity_threshold: Legacy field, kept for backward compat.
+        revision_strength: Legacy field, kept for backward compat.
+        practicality_criticality: Legacy field, kept for backward compat.
         metadata: Additional metadata for the analysis.
     """
 
@@ -87,14 +174,39 @@ class HivemindInput:
     agent_ids: list[str] = field(default_factory=list)
     theory_agent_ids: list[str] = field(default_factory=list)
     practicality_agent_ids: list[str] = field(default_factory=list)
+    analysis_mode: str = "simple"
+    effort_level: str = "medium"
     sufficiency_value: int = 1
     feasibility_threshold: int = 80
+    max_total_llm_calls: int | None = None
+    max_total_tokens: int | None = None
+    max_wallclock_ms: int | None = None
+    max_repair_iterations: int = 2
+    stagnation_window_rounds: int = 2
+    min_aggregation_improvement: int = 1
     theory_network_density: int | None = None
     max_veto_restarts: int = 3
     similarity_threshold: float = 0.65
     revision_strength: float = 0.5
     practicality_criticality: float = 0.5
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def get_effective_max_rounds(self) -> int:
+        """Return max debate rounds based on effort level."""
+        defaults = EFFORT_DEFAULTS.get(self.effort_level, EFFORT_DEFAULTS["medium"])
+        return defaults["max_rounds"]
+
+    def get_effective_max_repair_iterations(self) -> int:
+        """Return max repair iterations, preferring explicit over effort default."""
+        defaults = EFFORT_DEFAULTS.get(self.effort_level, EFFORT_DEFAULTS["medium"])
+        return self.max_repair_iterations if self.max_repair_iterations != 2 else defaults["max_repair_iterations"]
+
+    def get_effective_max_llm_calls(self) -> int:
+        """Return max LLM calls, preferring explicit over effort default."""
+        if self.max_total_llm_calls is not None:
+            return self.max_total_llm_calls
+        defaults = EFFORT_DEFAULTS.get(self.effort_level, EFFORT_DEFAULTS["medium"])
+        return defaults["max_total_llm_calls"]
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +317,7 @@ class Critique:
 @dataclass
 class AggregatedSolution:
     """Multiple similar solutions aggregated by the Monitor.
-    
+
     The Monitor groups similar solutions together and lists all their
     theoretical justifications side-by-side.
     """
@@ -216,12 +328,13 @@ class AggregatedSolution:
     justifications: list[str] = field(default_factory=list)
     confidence_score: float = 0.0
     retrieved_chunk_ids: list[str] = field(default_factory=list)
+    cluster_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class DynamicTheoryUnit:
     """A dynamically created theory network unit based on density distribution.
-    
+
     Created when theory_network_density is specified in the input.
     Each unit receives a portion of the knowledge base documents such that
     the total token count approximately matches the density value.
@@ -278,6 +391,9 @@ class Recommendation:
     feasibility_scores: list[FeasibilityScore] = field(default_factory=list)
     average_feasibility: float = 0.0
     suggested_actions: list[Action] = field(default_factory=list)
+    status: str = "approved"
+    repair_history: list[dict[str, Any]] = field(default_factory=list)
+    partial_scoring: bool = False
 
 
 @dataclass
@@ -325,6 +441,10 @@ class HivemindOutput:
     duration_ms: int = 0
     total_tokens: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+    termination_reason: str = ""
+    budget_usage: BudgetUsage = field(default_factory=BudgetUsage)
+    mode_used: str = "simple"
+    repair_stats: RepairStats = field(default_factory=RepairStats)
 
 
 # ---------------------------------------------------------------------------

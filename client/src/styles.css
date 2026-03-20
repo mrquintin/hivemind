@@ -1253,3 +1253,198 @@ body {
   max-width: 480px;
   text-align: center;
 }
+
+/* ========== Mode & Effort Selectors ========== */
+.mode-selector {
+  display: flex;
+  gap: 0;
+}
+
+.mode-btn {
+  padding: 0.5rem 1.2rem;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.15s;
+}
+
+.mode-btn:first-child {
+  border-right: none;
+}
+
+.mode-btn.active {
+  background: rgba(127, 215, 255, 0.12);
+  color: #7fd7ff;
+  border-color: rgba(127, 215, 255, 0.4);
+}
+
+.mode-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.effort-selector .mode-btn {
+  padding: 0.4rem 1rem;
+}
+
+.effort-selector .mode-btn:first-child {
+  border-right: none;
+}
+
+.effort-selector .mode-btn:nth-child(2) {
+  border-right: none;
+}
+
+.mode-description {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 0.25rem;
+}
+
+/* ========== Experimental badge ========== */
+.experimental-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+  align-self: flex-start;
+}
+
+/* ========== Termination banner ========== */
+.termination-banner {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: #7fd7ff;
+  border-left: 3px solid #7fd7ff;
+  background: rgba(127, 215, 255, 0.06);
+}
+
+/* ========== Stats bar with labels ========== */
+.stat-label {
+  display: block;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 0.1rem;
+}
+
+/* ========== Repair summary ========== */
+.repair-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.repair-summary-label {
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+}
+
+.repair-stat {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.65rem;
+}
+
+.repair-stat.recovered {
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.repair-stat.failed {
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.repair-stat.iterations {
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ========== Recommendation status badges ========== */
+.rec-status-badge {
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rec-status-badge.approved {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.rec-status-badge.vetoed {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.rec-status-badge.failed_after_repairs {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.failed-card {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* ========== Repair history ========== */
+.repair-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.repair-history-item {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid rgba(245, 158, 11, 0.3);
+}
+
+/* ========== Repair status in monitor ========== */
+.repair-status {
+  color: #f59e0b !important;
+  animation: pulse-text 1.2s ease-in-out infinite;
+}
+
+/* ========== Status dot in monitor conclusion ========== */
+.rec-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  flex-shrink: 0;
+}
+
+.rec-status-dot.approved {
+  background: #22c55e;
+}
+
+.rec-status-dot.failed_after_repairs {
+  background: #f59e0b;
+}
+
+.rec-status-dot.vetoed {
+  background: #ef4444;
+}

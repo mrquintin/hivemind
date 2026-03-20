@@ -8,7 +8,7 @@ The supported Hivemind Cloud deployment path is:
 
 For the full walkthrough, database migration steps, and restricted-access setup, use the root guide:
 
-- `../../AWS_GUIDE.md`
+- `../../docs/AWS_GUIDE.md`
 
 ## Deployment Files
 
