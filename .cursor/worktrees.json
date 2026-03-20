@@ -1,0 +1,9 @@
+{
+  "setup-worktree": [
+    "echo '🔧 Initializing parallel agent worktree...'",
+    "if [ -f \"$ROOT_WORKTREE_PATH/package-lock.json\" ]; then npm install; elif [ -f \"$ROOT_WORKTREE_PATH/pnpm-lock.yaml\" ]; then pnpm install; elif [ -f \"$ROOT_WORKTREE_PATH/yarn.lock\" ]; then yarn install; elif [ -f \"$ROOT_WORKTREE_PATH/requirements.txt\" ]; then pip install -r requirements.txt; elif [ -f \"$ROOT_WORKTREE_PATH/Pipfile\" ]; then pipenv install; elif [ -f \"$ROOT_WORKTREE_PATH/pyproject.toml\" ]; then pip install -e .; fi",
+    "if [ -f \"$ROOT_WORKTREE_PATH/.env\" ]; then cp \"$ROOT_WORKTREE_PATH/.env\" .env; fi",
+    "if [ -f \"$ROOT_WORKTREE_PATH/.env.local\" ]; then cp \"$ROOT_WORKTREE_PATH/.env.local\" .env.local; fi",
+    "echo '✅ Worktree ready for agent execution.'"
+  ]
+}

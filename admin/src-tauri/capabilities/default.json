@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-ping",
+    "allow-get-local-status",
+    "allow-start-local-services",
+    "allow-stop-local-services"
+  ]
+}

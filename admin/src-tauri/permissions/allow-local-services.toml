@@ -1,0 +1,18 @@
+# Copyright 2019-2024 Tauri Programme within The Commons Conservancy
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
+
+[[permission]]
+identifier = "allow-get-local-status"
+description = "Enables the get_local_status command."
+commands.allow = ["get_local_status"]
+
+[[permission]]
+identifier = "allow-start-local-services"
+description = "Enables the start_local_services command."
+commands.allow = ["start_local_services"]
+
+[[permission]]
+identifier = "allow-stop-local-services"
+description = "Enables the stop_local_services command."
+commands.allow = ["stop_local_services"]

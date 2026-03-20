@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hivemind Admin",
+  "version": "0.1.0",
+  "identifier": "com.thenashlab.hivemind.admin",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Hivemind Admin",
+        "width": 1280,
+        "height": 800
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' asset: https://asset.localhost; connect-src 'self' http: https: ws: wss:; img-src 'self' asset: https://asset.localhost data:; font-src 'self' data:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "shortDescription": "Management console for the Hivemind platform.",
+    "longDescription": "Hivemind Admin provides agent creation, knowledge management, client controls, and local server operations.",
+    "category": "Productivity"
+  }
+}

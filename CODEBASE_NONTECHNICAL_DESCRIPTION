@@ -1,0 +1,1097 @@
+HIVEMIND CODEBASE NONTECHNICAL DESCRIPTION
+
+This document explains the Hivemind codebase in plain English for someone who does not write software.
+
+It answers four questions:
+
+1. What product is this repository trying to build?
+2. What does the software actually do today?
+3. What does each major folder in the repository exist for?
+4. Which parts look central and active, and which parts look like support tooling, older packaging, or unfinished work?
+
+
+==================================================
+1. THE SIMPLEST POSSIBLE SUMMARY
+==================================================
+
+Hivemind is a strategic decision-support product.
+
+Its purpose is to help a person or organization bring a difficult business or career decision into a system that:
+
+- gathers relevant strategic knowledge,
+- lets several AI "specialists" think about the problem from different angles,
+- makes those AI specialists challenge one another,
+- combines overlapping ideas into a smaller set of conclusions,
+- sends those conclusions to a second set of AI specialists focused on real-world feasibility,
+- rejects ideas that fail the practicality test,
+- and returns recommendations, supporting reasoning, and a step-by-step record of how the result was produced.
+
+In everyday terms, Hivemind is trying to act like a panel of strategy experts plus a panel of realism-checkers, all coordinated by software.
+
+The repository currently contains three main product surfaces:
+
+- `admin/`: the internal operator desktop app used to set up the system.
+- `cloud/`: the central server where the data lives and where the AI analysis actually runs.
+- `client/`: the end-user desktop app used to submit a strategic question and view the results.
+
+There is also:
+
+- `client-demo/`: a scripted showcase version of the client.
+- `deploy/aws/`: the files for hosting the backend on AWS.
+- `scripts/`, `backend/launchers/`, and the root `.app` launchers: convenience and packaging helpers.
+- `exports/`: packaged installers and uninstallers.
+- `docs/` plus root planning documents: product vision, architecture notes, and development plans.
+
+
+==================================================
+2. WHAT PROBLEM THE PRODUCT IS TRYING TO SOLVE
+==================================================
+
+The product description says the company wants to close a gap between ordinary economic decision-makers and highly trained business strategists.
+
+The underlying idea is:
+
+- many people make important career or business decisions without having access to strong strategic thinking,
+- business-school-style frameworks can help, but they are hard to apply rigorously in a live decision,
+- and even good strategic ideas are not enough unless they survive real-world constraints such as legal, financial, operational, reputational, or organizational feasibility.
+
+So Hivemind is designed to combine two kinds of thinking:
+
+- theory: what seems strategically strong in principle;
+- practicality: what can realistically survive in the real world.
+
+That is the heart of the product.
+
+
+==================================================
+3. A PLAIN-ENGLISH GLOSSARY
+==================================================
+
+Because the codebase uses some specialized terms, here is what they mean without technical language.
+
+Agent
+- An AI role with a specific specialty, personality, or job.
+- Example: one agent may think like a strategy theorist, another like a regulatory reviewer.
+
+Theory network
+- The group of AI units that tries to generate strong strategic ideas.
+
+Practicality network
+- The group of AI units that checks whether those ideas are realistic, safe, and feasible.
+
+Monitor
+- The referee and organizer.
+- It watches the theory-side debate, groups similar answers together, and decides when the debate has narrowed enough.
+
+Knowledge base
+- A library of documents the AI can search when it needs relevant information.
+
+RAG
+- A common AI pattern where the system searches stored documents for the most relevant passages and feeds those passages into the AI before it answers.
+- In plain English: "look things up first, then answer."
+
+Simulation
+- A calculation tool the system can use when a problem needs numbers, formulas, or modeled outcomes.
+
+Audit trail
+- A record of what happened during the analysis: which steps ran, how much AI work was used, and which units contributed.
+
+Sufficiency value
+- A user setting that controls how many distinct final conclusion groups are acceptable before the system stops debating.
+
+Feasibility threshold
+- A user setting that controls how hard the practicality side can reject ideas.
+
+Theory network density
+- A user setting that controls how much source knowledge each theory unit gets.
+
+Similarity threshold
+- A user setting that controls how aggressively the monitor groups two ideas together as "basically the same."
+
+Revision strength
+- A user setting that controls how much the theory units change their answer after being criticized by the others.
+
+Practicality criticality
+- A user setting that controls how harshly the practicality side judges the recommendations.
+
+
+==================================================
+4. THE PRODUCT AS A HUMAN WOULD EXPERIENCE IT
+==================================================
+
+There are two real product roles in the repository today:
+
+- the operator who prepares the system;
+- the end user who asks for analysis.
+
+
+4.1 The operator journey
+
+The operator uses the Admin app.
+
+Their job is to prepare the system so the end-user analysis is meaningful. In practical terms, the operator can:
+
+- point the app at a server,
+- check whether the server is reachable,
+- store the Anthropic AI key on the server,
+- create and manage theory knowledge bases,
+- upload theory documents,
+- paste theory text directly,
+- auto-classify some documents as theory or practicality,
+- test knowledge retrieval,
+- create and manage practicality units,
+- attach knowledge to those practicality units,
+- upload practicality documents,
+- preview the prompt that a practicality unit will use,
+- publish practicality units so they become available for analysis,
+- create and test standalone simulations,
+- upload a paired Python simulation program and a companion explanation document,
+- and, in a local bundled mode, start or stop a local database, vector store, and local server.
+
+This means the Admin app is best understood as the "system preparation console."
+
+It is not primarily for running analyses. It is primarily for curating the AI's knowledge, setting up its evaluators, and keeping the backend reachable.
+
+
+4.2 The end-user journey
+
+The end user uses the Client app.
+
+Their experience is much more focused.
+
+They:
+
+1. open the app,
+2. enter a username,
+3. optionally change the server address if needed,
+4. enter a problem statement,
+5. optionally paste supporting context into a side panel,
+6. adjust the decision settings,
+7. optionally choose specific theory and practicality agents,
+8. launch the analysis,
+9. watch live progress as the system works through the stages,
+10. receive approved recommendations, vetoed recommendations, feasibility details, and an audit trail,
+11. optionally download the result as a text report,
+12. then return to the main screen for a new analysis.
+
+The real client is therefore a focused "analysis terminal," not a broad dashboard.
+
+
+4.3 The demo journey
+
+The repository also includes a separate `client-demo/` application.
+
+This is not the real live client. It is a scripted presentation layer that mimics the product experience using prewritten sample data and preplanned outcomes.
+
+Its purpose appears to be demonstration, pitching, or UI previewing.
+
+The demo:
+
+- uses a hardcoded access key,
+- shows example business data files,
+- uses a prewritten restaurant decision scenario,
+- steps through a planned theory/practicality flow,
+- and displays a prewritten final report.
+
+It is useful for showing the idea of the product, but it is not the same thing as the real backend-driven client.
+
+
+==================================================
+5. WHAT THE SYSTEM DOES DURING A REAL ANALYSIS
+==================================================
+
+This is the most important section in the whole document.
+
+When a real user runs an analysis in the current codebase, the intended flow is:
+
+1. The user writes a strategic problem.
+2. The user may also paste extra context.
+3. The system decides which theory-side AI units and practicality-side AI units should participate.
+4. The theory-side units search their attached knowledge and generate initial solutions.
+5. Each theory unit sees the others' answers and critiques them.
+6. Each theory unit revises its own answer after receiving criticism.
+7. The monitor groups similar answers together into a smaller number of conclusion clusters.
+8. If there are still too many distinct conclusion groups, another critique-and-revision round happens.
+9. Once the conclusions are narrow enough, the practicality-side units score them for real-world feasibility.
+10. If a recommendation falls below the required feasibility level, the system can veto the whole answer set and restart from scratch.
+11. The surviving recommendations are returned to the user.
+12. The system stores a record of the run, including the request, outputs, and audit information.
+
+That is the conceptual center of Hivemind.
+
+
+5.1 How theory-side analysis works in plain language
+
+The theory side is the "idea generation and strategic reasoning" side.
+
+Each theory unit:
+
+- has a specialty,
+- has access to one or more knowledge libraries,
+- can receive the user's question and optional context,
+- searches for relevant source material,
+- and produces a solution plus supporting reasoning.
+
+The system can work in two modes:
+
+- manual selection: the user picks which theory agents to use;
+- density-based mode: the system tries to create theory units automatically based on how much knowledge each unit should receive.
+
+The theory-side process is intentionally argumentative. The units do not just answer once and stop. They challenge one another and revise.
+
+
+5.2 What the monitor does
+
+The monitor is not just another opinion. It is more like a referee and summarizer.
+
+It:
+
+- watches the different theory outputs,
+- measures whether two outputs are close enough to count as similar,
+- groups similar outputs together,
+- preserves multiple supporting reasons when several units agree,
+- and checks whether the number of distinct conclusion groups has dropped low enough.
+
+This is what allows Hivemind to move from "many overlapping ideas" to "a smaller set of usable recommendations."
+
+
+5.3 What the practicality side does
+
+After the theory side has converged enough, the practicality side evaluates each resulting recommendation.
+
+Each practicality unit is meant to represent some kind of real-world barrier or operational lens, such as:
+
+- feasibility,
+- risk,
+- compliance,
+- implementation difficulty,
+- public reaction,
+- staffing strain,
+- or other practical consequences.
+
+Each practicality unit gives:
+
+- a feasibility score,
+- risks,
+- challenges,
+- mitigations,
+- and reasoning.
+
+The system averages these judgments and compares them to the user's threshold.
+
+
+5.4 What veto means
+
+Veto is one of the strongest product ideas in the repository.
+
+It means the system is not satisfied with returning a clever-but-unusable answer.
+
+If a recommendation scores too poorly on practicality, the software can reject the entire set of proposed answers and force the theory side to start over.
+
+That is why the product is not just "an AI that answers questions."
+It is trying to be "an AI process that forces strategic ideas to survive a realism check."
+
+
+5.5 What the user sees when it finishes
+
+The real client shows:
+
+- approved recommendations,
+- vetoed solutions,
+- per-recommendation feasibility scores,
+- detailed reasoning,
+- a statistics bar,
+- and an optional audit trail.
+
+The user can also export the result as a plain text report.
+
+
+==================================================
+6. WHAT EACH MAJOR PART OF THE REPOSITORY EXISTS FOR
+==================================================
+
+This section explains the repository folder by folder.
+
+
+6.1 `admin/` - the operator desktop app
+
+This is a desktop control console built for the people who prepare and maintain Hivemind.
+
+Its visible pages are:
+
+- `Dashboard`: local stack status and local start/stop controls.
+- `Theory Frameworks`: knowledge base creation, theory document uploads, pasted framework text, smart upload, and retrieval testing.
+- `Simulations`: standalone simulation creation, editing, testing, and a separate workflow for uploading a Python simulation plus its description.
+- `Practicality Units`: creation and publishing of practicality-side agents, attachment of knowledge, upload of practicality documents, prompt preview, and testing.
+- `Settings`: server connection settings and API key management.
+
+Important nontechnical takeaway:
+
+- the Admin app is how the company shapes what Hivemind knows and how it judges things;
+- it is not the main end-user question screen.
+
+Important nuance:
+
+- this app still contains a local all-in-one mode where it can start PostgreSQL, Qdrant, and the cloud server on the same machine;
+- at the same time, the newer documentation emphasizes a hosted AWS server;
+- so the codebase clearly carries both a hosted-cloud story and a local-bundled story.
+
+
+6.2 `client/` - the real end-user desktop app
+
+This is the actual user-facing analysis application.
+
+It currently provides:
+
+- username-based login,
+- server connectivity checking,
+- optional server URL override,
+- a single-screen analysis workspace,
+- sliders and advanced controls,
+- optional manual agent selection,
+- optional use-case and decision-type selection,
+- live streamed progress during the run,
+- result viewing,
+- audit trail viewing,
+- and text export.
+
+Important nontechnical takeaway:
+
+- the client is focused and narrow by design;
+- it is meant to submit one problem at a time and show one run's results clearly.
+
+It does not currently look like a broad account portal or reporting dashboard.
+
+
+6.3 `client-demo/` - a presentation demo
+
+This is a demonstration-only version of the client.
+
+It appears designed to explain the concept visually rather than to perform real live analyses.
+
+It includes:
+
+- a built-in business case,
+- fake accessible data files,
+- a scripted veto-and-restart story,
+- a scripted final report,
+- and a "pause/resume" demo behavior.
+
+Important nontechnical takeaway:
+
+- this folder is for showing the product story;
+- it is not the production analysis app.
+
+
+6.4 `cloud/` - the central server and analysis brain
+
+This is the most important product folder in the repository.
+
+It contains the server that:
+
+- receives requests from the Admin and Client apps,
+- stores agents, knowledge, simulations, clients, and analysis results,
+- processes uploaded documents,
+- performs search over stored knowledge,
+- calls the AI model,
+- runs the theory/practicality debate process,
+- and serves lightweight web dashboards for operations and knowledge browsing.
+
+Inside `cloud/`, there are several distinct roles:
+
+`cloud/app/`
+- the web server and API layer.
+- This is where the routes live: login, agents, knowledge bases, simulations, settings, analyses, health checks, clients, client data, and scraped sources.
+
+`cloud/hivemind_core/`
+- the reusable "analysis engine."
+- This is the pure logic of the Hivemind debate workflow: theory generation, critique, revision, aggregation, practicality scoring, veto, and final output.
+
+`cloud/app/models/`
+- definitions of the kinds of records the system stores.
+
+`cloud/app/rag/`
+- the document-processing and document-search machinery.
+- This is what extracts text, chunks it, embeds it, and pushes it into the vector search system.
+
+`cloud/app/services/`
+- support services such as document optimization, file storage, and simulation execution.
+
+`cloud/app/templates/`
+- simple browser pages for server health and a browsable knowledge browser.
+
+`cloud/scripts/`
+- server startup and maintenance scripts.
+
+`cloud/tests/`
+- a small automated test area, mainly around simulations, helper logic, and core data types.
+
+
+6.5 `deploy/aws/` - production hosting files
+
+This folder exists to run the backend in the cloud.
+
+In simple terms, it defines how to host:
+
+- the Hivemind app server,
+- the vector database,
+- a PostgreSQL database,
+- and optional file storage in S3.
+
+The AWS deployment story in this repo is:
+
+- EC2 runs the app and Qdrant,
+- RDS hosts PostgreSQL,
+- S3 can hold uploaded files,
+- Docker Compose ties the pieces together on the server,
+- bootstrap and deploy scripts help bring the stack up.
+
+Important nontechnical takeaway:
+
+- this folder is about how the product is hosted, not how users interact with it.
+
+
+6.6 `scripts/` - launchers and internal helper scripts
+
+This folder mixes two very different kinds of scripts.
+
+Product-facing launch scripts:
+
+- `launch_admin.command`
+- `launch_client.command`
+
+These are Mac launcher scripts that:
+
+- install prerequisites if needed,
+- install project dependencies if needed,
+- and start the Admin or Client app from source using Tauri development mode.
+
+This means the root `.app` files are not simple prebuilt product binaries. They are thin launch wrappers around these scripts.
+
+Internal developer scripts:
+
+- `agents.sh`
+- `install-global-parallel-agents.sh`
+
+These are not Hivemind product features. They are helper tools for development workflow and AI-assisted coding setup.
+
+
+6.7 `backend/launchers/` - older setup scripts
+
+Despite the name, this is not the main product backend.
+
+It contains older setup and launch scripts that:
+
+- install prerequisites,
+- try to auto-detect a server URL,
+- help start Admin or Client,
+- and remove Mac security restrictions from app bundles.
+
+These scripts look like an earlier packaging approach and partly overlap with the newer root launchers.
+
+Important nontechnical takeaway:
+
+- this folder is support tooling, not the core analysis product.
+
+
+6.8 `exports/` - packaged installers and uninstallers
+
+This folder contains packaged distribution artifacts such as:
+
+- `Hivemind Admin.pkg`
+- `Hivemind Client.pkg`
+- `Hivemind Cloud.pkg`
+- uninstall applications for Client and Cloud
+
+This shows the team has been preparing installer-style distribution, especially for Mac.
+
+The Cloud uninstaller strongly suggests that a more local packaged cloud setup existed or was planned at some point, because it removes local cloud-related processes and local data.
+
+
+6.9 `build/` - sparse packaging/build leftovers
+
+This folder exists, but it does not appear to be a major active product area.
+
+What is present looks more like:
+
+- partial packaging output,
+- validation folders,
+- or build experiment leftovers.
+
+Important nontechnical takeaway:
+
+- this folder does not appear to be where the main product logic lives.
+
+
+6.10 `docs/` - product explanation and planning documents
+
+This folder contains the clearest plain-English design documents in the repo:
+
+- `PRODUCT_DESCRIPTION.txt`: the original business and product vision.
+- `ARCHITECTURE.md`: a bridge between the vision and the code.
+- `DEVELOPMENT_PLAN.md`: a statement of what has been implemented and what still remains.
+
+These files are especially useful because the codebase includes both current behavior and future ambition.
+
+
+6.11 Root-level documents and apps
+
+At the repository root there are several important items:
+
+Product and architecture documents:
+
+- `README.md`
+- `INFRASTRUCTURE.md`
+- `AWS_GUIDE.md`
+- `PRODUCT_DESCRIPTION.txt`
+- `ALIGNMENT_PLAN.md`
+- `CODEX_PROMPT.md`
+
+Convenience launchers:
+
+- `Hivemind Admin.app`
+- `Hivemind Client.app`
+- `Archive Admin.app`
+- `Archive Client.app`
+- `First Run Setup.command`
+
+The root `.app` files are launcher wrappers. For Admin and Client they simply open the relevant `scripts/launch_*.command` file.
+
+The two archive apps appear to point at missing archive scripts, which suggests those archive flows are incomplete or no longer maintained in the current tree.
+
+`ALIGNMENT_PLAN.md` and `CODEX_PROMPT.md` are not end-user product documents. They are internal remediation/planning documents about how the codebase should be fixed or aligned with the original vision.
+
+
+==================================================
+7. WHAT THE CLOUD SERVER ACTUALLY STORES
+==================================================
+
+The server stores the product's memory and operational records.
+
+In human terms, it keeps track of:
+
+Agent definitions
+- the AI roles, what network they belong to, what they know, and how they should behave.
+
+Knowledge bases
+- named libraries of source material.
+
+Knowledge documents
+- the original uploaded files or pasted text entries.
+
+Text chunks
+- smaller searchable pieces made from those documents.
+
+Simulation formulas
+- reusable calculations with named inputs and outputs.
+
+Clients
+- named client records with license-related information and enabled agents.
+- The backend supports this client-record concept, although the current desktop client experience is still centered on a simpler username-based login flow.
+
+Client data
+- stored text entries associated with a client.
+
+Scraped sources
+- records of URLs or search-like sources that might be gathered for outside context.
+
+Analysis results
+- past runs, including the request, outputs, stats, and audit trail.
+
+API key settings
+- the model-provider key needed for AI calls, stored in a masked or encrypted form.
+
+
+==================================================
+8. HOW KNOWLEDGE GETS INTO THE SYSTEM
+==================================================
+
+One of the strongest parts of the codebase is the knowledge ingestion pipeline.
+
+In plain English, when an operator uploads a document, the system does not just save the file and stop.
+
+It usually does all of the following:
+
+1. store the raw file,
+2. extract the readable text from it,
+3. optionally improve that text for better AI retrieval,
+4. split it into smaller searchable passages,
+5. turn those passages into searchable numeric representations,
+6. store the passages in the main database,
+7. and store the search vectors in the vector database.
+
+This is how Hivemind builds a searchable knowledge library.
+
+
+8.1 Supported document types
+
+The code supports more than just plain text files.
+
+Based on the actual extraction and upload code, the current system handles:
+
+- plain text,
+- PDF,
+- Word documents,
+- and HTML.
+
+This matters because the product is clearly built around feeding the AI curated source material.
+
+
+8.2 Theory documents
+
+Theory documents are the strategic or analytical reference materials.
+
+Examples would be:
+
+- strategic frameworks,
+- business methodologies,
+- analytical principles,
+- or decision-making models.
+
+These feed the theory side of Hivemind.
+
+
+8.3 Practicality documents
+
+Practicality documents are the realism-checking reference materials.
+
+Examples would be:
+
+- risk criteria,
+- compliance rules,
+- feasibility guidelines,
+- regulatory constraints,
+- or operational benchmarks.
+
+These feed the practicality side of Hivemind.
+
+
+8.4 Smart upload
+
+There is also a "smart upload" workflow where the system tries to classify a document as theory-oriented or practicality-oriented before processing it.
+
+In plain English:
+
+- the operator gives it a document,
+- the AI guesses whether the document is more about strategy or more about constraints,
+- then the document is processed accordingly.
+
+
+8.5 Pasted text workflow
+
+The operator does not always need a file.
+
+The code also allows text to be pasted directly into the knowledge system, then stored and indexed like an uploaded document.
+
+
+8.6 Retrieval testing
+
+The Admin app lets the operator test whether the system can find the right knowledge passages for a sample question.
+
+This is an important quality check because the whole product depends on the AI finding the right background material at the right time.
+
+
+==================================================
+9. HOW SIMULATIONS FIT INTO THE PRODUCT
+==================================================
+
+The repository contains two simulation ideas at once.
+
+
+9.1 Standalone formula-style simulations
+
+These are clean, structured calculations with:
+
+- inputs,
+- formulas,
+- outputs,
+- tags,
+- and a test runner.
+
+Example:
+
+- revenue and cost go in,
+- profit and margin come out.
+
+This simulation type is clearly supported in the Admin app and in the backend API.
+
+
+9.2 Uploaded Python simulation programs with companion descriptions
+
+There is also a second simulation workflow where the operator uploads:
+
+- a Python program file,
+- plus a companion explanation document.
+
+The current code stores both, and it indexes the explanation document so it can be found during retrieval.
+
+That means the repository is trying to support richer, code-based simulations in addition to simple formulas.
+
+Important nuance:
+
+- the standalone formula simulation workflow looks more complete and better surfaced in the current UI;
+- the uploaded Python-program simulation flow is present, but its role in the live analysis path appears less fully matured.
+
+In nontechnical terms: the product clearly wants AI units to use calculations when helpful, but the simpler calculation format looks more production-ready than the richer uploaded-program format.
+
+
+==================================================
+10. WHAT THE CLIENT CONTROLS REALLY MEAN
+==================================================
+
+The end-user client has several controls that are easy to misunderstand. Here they are in plain language.
+
+Problem description
+- The actual strategic question.
+
+Client context
+- Extra background text the user pastes in.
+- Right now, this is mostly a paste box, not a full file-management system.
+
+Sufficiency value
+- "How many different final answer families am I willing to accept before the system stops debating?"
+
+Feasibility threshold
+- "How demanding should the reality-check be before an answer is rejected?"
+
+Theory network density
+- "How much source knowledge should each theory-side unit get?"
+
+Dynamic density mode
+- "Instead of me choosing the theory units manually, let the system try to build them automatically from the available knowledge."
+
+Similarity threshold
+- "How similar do two ideas need to be before the monitor lumps them together?"
+
+Revision strength
+- "How willing should each theory unit be to change its answer after receiving criticism?"
+
+Practicality criticality
+- "How harsh should the practicality judges be?"
+
+Use-case profile
+- A broad context such as small business, individual career, or enterprise.
+
+Decision type
+- A more specific decision category such as market entry, pricing, or M&A.
+
+Manual agent selection
+- The user can explicitly choose which theory and practicality units should participate.
+
+These controls show that the product is not just returning a single canned AI response. It is exposing parts of the debate mechanism itself.
+
+
+==================================================
+11. WHAT THE ADMIN APP REALLY CONTROLS
+==================================================
+
+The Admin side is where the operator shapes the product's intelligence.
+
+In nontechnical terms, the operator is defining:
+
+- what strategic knowledge exists,
+- what realism-check knowledge exists,
+- what kinds of practicality judges exist,
+- what calculations are available,
+- and what server the whole system points to.
+
+One subtle implementation detail matters here:
+
+- the current Admin UI does not expose a full manual editor for theory agents in the same way it does for practicality units;
+- instead, the theory knowledge-base workflow auto-manages a hidden theory agent called `__system_theory__`.
+
+In practical terms, this means theory-side behavior is currently driven more by the knowledge libraries than by a richly editable theory-agent screen.
+
+That is a meaningful product design choice in the current codebase, even if it may not be the long-term intended final design.
+
+
+==================================================
+12. THE SERVER'S EXTRA WEB PAGES
+==================================================
+
+Besides the APIs used by the desktop apps, the cloud server also serves two simple browser pages.
+
+Server dashboard
+- shows health information for the API, database, vector database, uptime, and API-key status.
+
+Knowledge browser
+- shows what knowledge bases, documents, chunks, and simulation formulas are stored on the server.
+
+These pages are not the main product experience, but they are useful operational windows into the system.
+
+
+==================================================
+13. DEPLOYMENT, INSTALLERS, AND LOCAL VS HOSTED MODES
+==================================================
+
+The codebase contains two deployment stories at once.
+
+
+13.1 Hosted AWS mode
+
+The newer and more clearly documented production path is:
+
+- host the cloud server on AWS,
+- keep PostgreSQL in RDS,
+- keep Qdrant alongside the app on EC2,
+- optionally use S3 for uploaded files,
+- connect the Admin and Client desktop apps to that hosted server.
+
+This is the clearest "real deployment" path in the docs.
+
+
+13.2 Local all-in-one mode
+
+At the same time, the Admin desktop shell still contains code to:
+
+- initialize a local PostgreSQL data directory,
+- start PostgreSQL locally,
+- start Qdrant locally,
+- start the Hivemind cloud server locally,
+- and stop them again when the app exits.
+
+This means the codebase still supports, or at least strongly remembers, a local bundled mode where a user can run much of the stack on their own machine.
+
+
+13.3 Mac launchers and first-run setup
+
+The repository includes:
+
+- `Hivemind Admin.app`
+- `Hivemind Client.app`
+- `First Run Setup.command`
+
+These are part convenience wrappers and part security workarounds for Mac.
+
+The first-run setup script removes Mac quarantine/security restrictions and signs the launcher apps so they open more smoothly.
+
+The launcher scripts also try to install missing dependencies and then start the apps from source.
+
+
+13.4 Packaged exports
+
+The `exports/` folder contains packaged `.pkg` installers and uninstallers for Admin, Client, and Cloud.
+
+That tells us the team has also been experimenting with traditional installer distribution, not just developer-style launching from source.
+
+
+==================================================
+14. WHAT IS CLEARLY IMPLEMENTED TODAY
+==================================================
+
+After reading both the documents and the code, the following capabilities appear clearly present today.
+
+Core product behavior that appears real:
+
+- a real cloud backend exists,
+- a real multi-agent debate pipeline exists,
+- the client can run live streamed analyses,
+- operators can build theory knowledge libraries,
+- operators can build practicality units,
+- operators can upload and index documents,
+- operators can test retrieval,
+- operators can create and run standalone simulations,
+- results can be stored and later fetched,
+- an audit trail is generated,
+- and there are real server health pages.
+
+Knowledge processing that appears real:
+
+- text extraction from several file types,
+- document optimization for search,
+- chunking,
+- vector indexing,
+- and retrieval at query time.
+
+Client experience that appears real:
+
+- login,
+- server checking,
+- real analysis submission,
+- real progress streaming,
+- output viewing,
+- and text export.
+
+
+==================================================
+15. WHAT APPEARS PLANNED, PARTIAL, OR UNEVEN
+==================================================
+
+This section is very important because the repository contains both ambition and implementation.
+
+Several features clearly exist in the product story but appear only partly connected in the current software.
+
+
+15.1 Stored client data is only partly integrated
+
+The backend has records and routes for client data.
+
+However, the live analysis flow currently looks much more centered on:
+
+- the user's typed problem,
+- and pasted text context.
+
+So the idea of a larger stored client-data library exists in the server, but it does not appear to be the center of the current end-user workflow.
+
+
+15.2 Internet-scraped data exists as a concept, but not as a mature end-user feature
+
+The server has routes for scraped sources and can fetch raw content from a URL.
+
+But this does not appear to be a polished, fully surfaced end-user feature in the current desktop apps.
+
+Also, true search-query scraping appears unfinished.
+
+
+15.3 Theory-agent authoring is not exposed as richly as practicality-agent authoring
+
+The current Admin UI gives a direct rich editor for practicality units.
+
+Theory-side management is more indirect through knowledge bases and an auto-managed hidden theory agent.
+
+So the theory-side editing story looks less explicit in the current product UI than the practicality-side story.
+
+
+15.4 Simulation support is uneven across the two simulation styles
+
+Standalone formula simulations are clearly supported.
+
+Uploaded Python simulation programs are stored and described, but their full end-to-end use inside the live analysis flow appears less straightforward.
+
+
+15.5 Documentation and packaging history show multiple product phases
+
+Some parts of the repo clearly describe:
+
+- local packaged cloud behavior,
+- archive flows,
+- older setup apps,
+- or richer product surfaces than the current UI actually shows.
+
+So the repository should be understood as an evolving system rather than a perfectly cleaned-up final product.
+
+
+15.6 Security/authentication maturity appears lightweight
+
+The codebase does include login and token creation.
+
+However, the overall repo gives the impression that:
+
+- authentication exists,
+- but some server routes are more "reachable service endpoints" than a fully locked-down enterprise platform.
+
+For a nontechnical reader, the practical takeaway is:
+
+- the codebase looks like an actively evolving product rather than a fully hardened, mature enterprise system.
+
+
+==================================================
+16. THE MOST IMPORTANT MENTAL MODEL
+==================================================
+
+If you only remember one thing, remember this:
+
+Hivemind is not just one app.
+
+It is three connected layers:
+
+1. a preparation layer,
+2. an analysis engine layer,
+3. and an end-user layer.
+
+Preparation layer
+- internal staff load the system with strategy knowledge, constraint knowledge, practicality judges, and simulations.
+
+Analysis engine layer
+- the server searches that knowledge, runs multiple AI roles, forces them to critique one another, combines similar conclusions, and rejects answers that fail practicality.
+
+End-user layer
+- a client submits a problem, watches the live process, and receives structured recommendations and reasoning.
+
+That three-layer model explains most of the repository.
+
+
+==================================================
+17. THE REPOSITORY IN ONE SENTENCE PER AREA
+==================================================
+
+`admin/`
+- the internal desktop console for preparing Hivemind's knowledge, evaluators, simulations, and server settings.
+
+`client/`
+- the real end-user desktop terminal for running live strategic analyses.
+
+`client-demo/`
+- a scripted showcase that demonstrates the concept without depending on the real backend.
+
+`cloud/`
+- the real backend where data is stored, documents are processed, and analyses are executed.
+
+`cloud/hivemind_core/`
+- the reusable logic for the multi-agent debate process.
+
+`deploy/aws/`
+- the production hosting recipe for running the backend on AWS.
+
+`scripts/`
+- launchers for Admin and Client plus internal developer convenience tools.
+
+`backend/launchers/`
+- older setup and security-fix scripts for local app launching.
+
+`exports/`
+- packaged installers and uninstallers.
+
+`build/`
+- sparse build or packaging leftovers, not the center of product behavior.
+
+`docs/`
+- the clearest product and architecture explanation files.
+
+Root docs
+- a mix of overview, infrastructure explanation, AWS instructions, and internal remediation/planning documents.
+
+
+==================================================
+18. FINAL BOTTOM LINE
+==================================================
+
+The Hivemind codebase is building a strategic analysis platform that combines:
+
+- curated business knowledge,
+- multiple AI reasoning roles,
+- cross-critique between those roles,
+- a monitor that compresses overlapping answers,
+- practicality scoring,
+- veto-and-restart behavior,
+- and a user-facing analysis terminal.
+
+The codebase is not just a chatbot repository.
+
+It is a multi-part system for:
+
+- preparing knowledge,
+- running structured strategic debates,
+- filtering those debates through realism,
+- and returning transparent recommendations.
+
+The current code appears strong in these areas:
+
+- document ingestion,
+- knowledge search,
+- multi-agent analysis flow,
+- practicality scoring,
+- live client feedback,
+- and operator tooling for knowledge preparation.
+
+The code appears less finished in these areas:
+
+- full integration of stored client data into live analyses,
+- internet-scraped context as a mature product feature,
+- a fully polished theory-agent management surface,
+- uniform simulation integration,
+- and general cleanup of older packaging and local-hosting artifacts.
+
+So the fairest nontechnical description of the repository is this:
+
+Hivemind is an evolving strategic decision platform whose central product idea is already visible and largely implemented: an internal team prepares knowledge and evaluators, a cloud engine runs a structured AI debate with realism checks, and an end user receives recommendations that are meant to be both intellectually strong and practically survivable.

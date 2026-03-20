@@ -1,0 +1,45 @@
+.generated_files/
+build/
+dist/
+nbproject/
+Makefile*
+Package-*
+private/
+_build/
+!cmake/**/user.cmake
+cmake/**/.generated/*
+cmake/**/CMake*
+out/
+
+# Reduce worktree "too many changes" – ignore large/generated dirs
+node_modules/
+.DS_Store
+*.pyc
+__pycache__/
+venv/
+.venv/
+.env
+.env.local
+.env.aws
+# Local RDS credentials (never commit)
+deploy/aws/RDS-CREDENTIALS.local.txt
+.cursor/worktrees/
+*.log
+.next/
+.nuxt/
+coverage/
+.nyc_output/
+# Build/cache (keeps worktree file count low for multi-agent)
+.cache/
+.parcel-cache/
+.turbo/
+.vite/
+.eslintcache
+*.tsbuildinfo
+.electron/
+release/
+*.map
+# API key files (encrypted, but still sensitive)
+.api_key
+.hivemind_settings.json
+target/

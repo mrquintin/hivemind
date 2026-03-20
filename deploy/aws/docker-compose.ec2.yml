@@ -1,0 +1,50 @@
+name: hivemind
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: hivemind-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__STORAGE__STORAGE_PATH: /qdrant/storage
+      QDRANT__STORAGE__TEMP_PATH: /qdrant/tmp
+    volumes:
+      - qdrant_storage:/qdrant/storage
+      - qdrant_tmp:/qdrant/tmp
+
+  app:
+    build:
+      context: ../..
+      dockerfile: cloud/Dockerfile
+    container_name: hivemind-cloud
+    restart: unless-stopped
+    env_file:
+      - ${HIVEMIND_ENV_FILE:-.env.aws}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.aws}
+      VECTOR_DB_URL: http://qdrant:6333
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8000"
+      AUTO_CREATE_TABLES: "True"
+      HIVEMIND_DATA_DIR: /var/lib/hivemind
+      HIVEMIND_UPLOADS_DIR: /var/lib/hivemind/uploads
+    ports:
+      - "${HIVEMIND_PUBLIC_PORT:-8000}:8000"
+    volumes:
+      - hivemind_data:/var/lib/hivemind
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      qdrant:
+        condition: service_started
+
+volumes:
+  qdrant_storage:
+  qdrant_tmp:
+  hivemind_data:

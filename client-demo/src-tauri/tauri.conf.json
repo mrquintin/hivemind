@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CLIENT DEMO",
+  "version": "0.1.0",
+  "identifier": "com.thenashlab.hivemind.clientdemo",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5175",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "CLIENT DEMO",
+        "width": 1280,
+        "height": 840
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Hivemind strategic analysis — cosmetic demo.",
+    "longDescription": "Demo client for Hivemind workflow: theory network, monitor, practicality network.",
+    "category": "Productivity",
+    "macOS": {
+      "dmg": {
+        "windowSize": {"width": 540, "height": 380},
+        "appPosition": {"x": 130, "y": 180},
+        "applicationFolderPosition": {"x": 370, "y": 180}
+      }
+    }
+  }
+}
