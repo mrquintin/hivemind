@@ -1,0 +1,94 @@
+================================================================================
+PASSWORD-BASED AUTHENTICATION — IMPLEMENTATION RECORD
+================================================================================
+
+STATUS: COMPLETED
+
+================================================================================
+WHAT CHANGED
+================================================================================
+
+Previously, both the admin and client apps used username-only login — no
+password was required. Anyone who knew a cleared username could obtain a JWT
+granting full API access, including triggering Anthropic API calls.
+
+Now:
+  - Both apps require username + password to log in.
+  - Passwords are hashed with bcrypt (via passlib) and stored in the database.
+  - Failed login attempts are rate-limited (5 per username per 5 minutes).
+  - Error messages are generic ("Invalid credentials") to prevent username
+    enumeration.
+  - Default users are automatically seeded on first server startup.
+
+
+================================================================================
+DEFAULT CREDENTIALS
+================================================================================
+
+  See /credentials.env in the repository root for the shareable file.
+
+  Admin App:
+    Username: admin
+    Password: hivemind-admin-2024
+    Role:     operator (full access to agent config, knowledge, settings)
+
+  Client App:
+    Username: client
+    Password: hivemind-client-2024
+    Role:     client (can run analyses, manage data, view results)
+
+  These accounts are created automatically on first server startup if the
+  users table is empty. To use different passwords, set DEFAULT_ADMIN_PASSWORD
+  and DEFAULT_CLIENT_PASSWORD in cloud/.env BEFORE the first startup.
+
+
+================================================================================
+FILES CREATED
+================================================================================
+
+  cloud/app/models/user.py    — User ORM model (username, password_hash, role)
+  cloud/app/security.py       — hash_password() and verify_password() via bcrypt
+  cloud/app/seed.py           — Idempotent seeder for default users on startup
+  credentials.env             — Shareable credentials file
+  docs/AUTH_IMPLEMENTATION.txt — This file
+
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+  cloud/requirements.txt              — Added passlib[bcrypt]==1.7.4
+  cloud/app/schemas/auth.py           — Added password field to LoginRequest
+  cloud/app/routers/auth.py           — Full rewrite: password verification,
+                                        rate limiting, removed CLEARED_USERNAMES
+  cloud/app/config.py                 — Removed CLEARED_USERNAMES, added
+                                        DEFAULT_ADMIN/CLIENT_PASSWORD
+  cloud/app/main.py                   — Import User model, call seed on startup
+  cloud/.env.example                  — Updated auth section documentation
+  cloud/tests/conftest.py             — Registered User model for test DB
+  cloud/tests/test_integration_auth.py — Rewritten: seed test users, test
+                                        passwords, rate limiting, edge cases
+  admin/src/pages/Login.tsx           — Added password input field
+  admin/src/api/client.ts             — login() now accepts password parameter
+  client/src/App.tsx                  — Added password field to LoginScreen
+  client/src/api/client.ts            — Added password to EnterMenuCredentials
+
+
+================================================================================
+SECURITY MEASURES
+================================================================================
+
+  1. Bcrypt password hashing (passlib CryptContext, auto-deprecated schemes)
+  2. Login rate limiting: 5 failed attempts per username per 5-minute window
+     returns HTTP 429. In-memory, thread-safe (threading.Lock).
+  3. Generic error messages: "Invalid credentials" for both wrong username and
+     wrong password — prevents username enumeration.
+  4. Usernames normalized to lowercase on storage and comparison.
+  5. is_active flag on User model for future account disabling.
+  6. JWT format unchanged (sub, role, exp) — existing auth infrastructure
+     (deps.py, role checks) continues to work without modification.
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================

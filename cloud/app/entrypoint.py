@@ -6,8 +6,10 @@ from app.main import app
 
 
 def main() -> None:
-    host = os.getenv("HIVEMIND_SERVER_HOST", "127.0.0.1")
-    port = int(os.getenv("HIVEMIND_SERVER_PORT", "8000"))
+    from app.config import settings
+
+    host = os.getenv("HIVEMIND_SERVER_HOST") or settings.SERVER_HOST
+    port = int(os.getenv("HIVEMIND_SERVER_PORT") or settings.SERVER_PORT)
     uvicorn.run(app, host=host, port=port)
 
 

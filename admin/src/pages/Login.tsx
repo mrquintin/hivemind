@@ -7,23 +7,26 @@ interface LoginProps {
 
 export default function Login({ onSuccess }: LoginProps) {
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = username.trim();
-    if (!trimmed) return;
+    if (!trimmed || !password) return;
 
     setLoading(true);
     setError("");
     try {
-      await login(trimmed);
+      await login(trimmed, password);
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("403")) {
-        setError("Username is not cleared for access.");
+      if (msg.includes("401")) {
+        setError("Invalid credentials.");
+      } else if (msg.includes("429")) {
+        setError("Too many failed attempts. Try again later.");
       } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
         setError("Cannot reach server. Check your connection.");
       } else {
@@ -95,6 +98,27 @@ export default function Login({ onSuccess }: LoginProps) {
             fontSize: 14,
             fontFamily: "inherit",
             outline: "none",
+            marginBottom: 12,
+            boxSizing: "border-box",
+          }}
+        />
+
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            background: "#0a0c10",
+            border: "1px solid #2a303d",
+            borderRadius: 8,
+            color: "#e8ecf2",
+            fontSize: 14,
+            fontFamily: "inherit",
+            outline: "none",
             marginBottom: 16,
             boxSizing: "border-box",
           }}
@@ -102,7 +126,7 @@ export default function Login({ onSuccess }: LoginProps) {
 
         <button
           type="submit"
-          disabled={loading || !username.trim()}
+          disabled={loading || !username.trim() || !password}
           style={{
             width: "100%",
             padding: "12px 0",
@@ -114,7 +138,7 @@ export default function Login({ onSuccess }: LoginProps) {
             fontWeight: 600,
             fontFamily: "inherit",
             cursor: loading ? "wait" : "pointer",
-            opacity: !username.trim() ? 0.5 : 1,
+            opacity: !username.trim() || !password ? 0.5 : 1,
           }}
         >
           {loading ? "Connecting..." : "Connect"}

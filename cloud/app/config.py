@@ -17,8 +17,9 @@ _DEFAULT_VECTOR_DB_URL = "http://qdrant:6333"
 
 class Settings(BaseSettings):
 
-    # Cleared usernames (comma-separated)
-    CLEARED_USERNAMES: str = ""
+    # Default user passwords (used when seeding the database for the first time)
+    DEFAULT_ADMIN_PASSWORD: str = "hivemind-admin-2024"
+    DEFAULT_CLIENT_PASSWORD: str = "hivemind-client-2024"
 
     # API Keys
     ANTHROPIC_API_KEY: str | None = None

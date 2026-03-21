@@ -50,6 +50,7 @@ def _import_all_models():
     import app.models.scraped_source  # noqa: F401
     import app.models.simulation_formula  # noqa: F401
     import app.models.text_chunk  # noqa: F401
+    import app.models.user  # noqa: F401
 
 
 _import_all_models()

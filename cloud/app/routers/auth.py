@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -9,10 +12,16 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.deps import get_any_authenticated, get_db
 from app.models.client import Client
-from app.routers.settings import get_active_api_key
+from app.models.user import User
 from app.schemas.auth import ClientConnectRequest, LoginRequest, TokenResponse
+from app.security import verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ---------------------------------------------------------------------------
+# Token creation
+# ---------------------------------------------------------------------------
 
 
 def _create_token(subject: str, extra: dict | None = None) -> str:
@@ -25,32 +34,56 @@ def _create_token(subject: str, extra: dict | None = None) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def _get_cleared_usernames() -> set[str]:
-    if not settings.CLEARED_USERNAMES:
-        return set()
-    return {
-        name.strip().lower()
-        for name in settings.CLEARED_USERNAMES.split(",")
-        if name.strip()
-    }
+# ---------------------------------------------------------------------------
+# Login rate limiting (brute-force protection)
+# ---------------------------------------------------------------------------
+
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_S = 300  # 5 minutes
+_login_lock = threading.Lock()
+_failed_attempts: dict[str, list[float]] = defaultdict(list)
+
+
+def _record_failed_attempt(username: str) -> None:
+    with _login_lock:
+        _failed_attempts[username].append(time.monotonic())
+
+
+def _check_login_rate_limit(username: str) -> None:
+    now = time.monotonic()
+    with _login_lock:
+        attempts = _failed_attempts.get(username, [])
+        recent = [t for t in attempts if now - t < _LOGIN_WINDOW_S]
+        _failed_attempts[username] = recent
+        if len(recent) >= _LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many failed login attempts. Try again later.",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest) -> TokenResponse:
-    username = payload.username.strip()
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    username = payload.username.strip().lower()
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
 
-    cleared_usernames = _get_cleared_usernames()
-    if cleared_usernames and username.lower() not in cleared_usernames:
-        raise HTTPException(status_code=403, detail="Username is not cleared")
+    _check_login_rate_limit(username)
 
-    # Set the API key from env/file (no hardcoded fallback; use ANTHROPIC_API_KEY or .api_key on AWS)
-    api_key = get_active_api_key()
-    if api_key:
-        settings.ANTHROPIC_API_KEY = api_key
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not verify_password(payload.password, user.password_hash):
+        _record_failed_attempt(username)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = _create_token(username, {"role": "operator"})
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    token = _create_token(user.username, {"role": user.role})
     return TokenResponse(access_token=token)
 
 

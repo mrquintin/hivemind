@@ -116,6 +116,8 @@ function SliderWithInput({
 function LoginScreen({
   username,
   onUsernameChange,
+  password,
+  onPasswordChange,
   onSubmit,
   error,
   isLoading,
@@ -124,6 +126,8 @@ function LoginScreen({
 }: {
   username: string;
   onUsernameChange: (v: string) => void;
+  password: string;
+  onPasswordChange: (v: string) => void;
   onSubmit: () => void;
   error: string;
   isLoading: boolean;
@@ -187,11 +191,19 @@ function LoginScreen({
             onChange={(e) => onUsernameChange(e.target.value)}
             autoFocus
           />
+          <label className="login-label" style={{ marginTop: 8 }}>Password</label>
+          <input
+            className="login-input"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => onPasswordChange(e.target.value)}
+          />
           {error && <div className="login-error">{error}</div>}
           <button
             className="login-button"
             type="submit"
-            disabled={!username.trim() || isLoading}
+            disabled={!username.trim() || !password || isLoading}
           >
             {isLoading ? "Verifying..." : "Enter"}
           </button>
@@ -306,6 +318,7 @@ export default function App() {
 
   // --- Auth ---
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -465,11 +478,11 @@ export default function App() {
   // ---------------------------------------------------------------------------
 
   async function handleLogin() {
-    if (!username.trim()) return;
+    if (!username.trim() || !password) return;
     setLoginLoading(true);
     setLoginError("");
     try {
-      await enterSystem({ username: username.trim() });
+      await enterSystem({ username: username.trim(), password });
       setPhase("login_fade_out");
       try {
         const a = await listPublishedAgents();
@@ -844,6 +857,8 @@ export default function App() {
         <LoginScreen
           username={username}
           onUsernameChange={setUsername}
+          password={password}
+          onPasswordChange={setPassword}
           onSubmit={handleLogin}
           error={loginError}
           isLoading={loginLoading}

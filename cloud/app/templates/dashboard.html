@@ -140,12 +140,10 @@
             <div class="apikey-msg" id="apikeyMsg"></div>
         </div>
         <div class="url-box">
-            <div class="url-label">Public URL</div>
-            <div class="url-value">https://www.thenashlabhivemind.com</div>
-        </div>
-        <div class="url-box" style="margin-top: 12px;">
-            <div class="url-label">Local URL</div>
-            <div class="url-value">http://localhost:8000</div>
+            <div class="url-label">Server URL</div>
+            <div class="url-value" id="serverUrl">
+                <script>document.getElementById('serverUrl').textContent = window.location.origin;</script>
+            </div>
         </div>
         <div class="url-box" style="margin-top: 12px;">
             <div class="url-label">Quick Links</div>

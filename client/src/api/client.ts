@@ -157,6 +157,7 @@ export interface AuthResponse {
 
 export interface EnterMenuCredentials {
   username: string;
+  password: string;
 }
 
 // -----------------------------------------------------------------------------

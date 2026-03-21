@@ -3,7 +3,7 @@ import os
 import time
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 
@@ -52,8 +52,10 @@ logger = _configure_logging()
 # Jinja2 template directory
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
+import app.models.user  # noqa: F401 — register User model for create_all
 from app.db.base import Base
 from app.db.session import engine
+from app.deps import get_current_user
 from app.routers import (
     agents,
     auth,
@@ -174,6 +176,11 @@ def on_startup():
             logger.error("Database connection failed on startup: %s", e)
             print(f"ERROR: Database connection failed: {e}", file=sys.stderr)
             raise RuntimeError("Cannot create tables; database unreachable. Check DATABASE_URL.") from e
+
+        # Seed default users if the users table is empty
+        from app.seed import seed_default_users
+
+        seed_default_users(engine)
 
 
 def _check_readiness() -> tuple[bool, str]:
@@ -304,7 +311,7 @@ def server_dashboard(request: Request):
 
 
 @app.get("/knowledge-browser")
-def knowledge_browser(request: Request):
+def knowledge_browser(request: Request, _user: dict = Depends(get_current_user)):
     """Browsable UI showing all bases stored on this server: knowledge, simulations, practicality."""
     from app.db.session import SessionLocal
     from app.models.knowledge_base import KnowledgeBase

@@ -277,10 +277,10 @@ export interface AuthResponse {
   token_type: string;
 }
 
-export async function login(username: string): Promise<AuthResponse> {
+export async function login(username: string, password: string): Promise<AuthResponse> {
   const response = await request<AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, password }),
   });
   setAuthToken(response.access_token);
   return response;
