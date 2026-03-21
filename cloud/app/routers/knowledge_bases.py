@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_document import KnowledgeDocument
 from app.models.text_chunk import TextChunk
@@ -30,12 +30,12 @@ router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
 # ---------------------------------------------------------------------------
 
 @router.get("", response_model=list[KnowledgeBaseOut])
-def list_knowledge_bases(db: Session = Depends(get_db)):
+def list_knowledge_bases(db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     return db.query(KnowledgeBase).all()
 
 
 @router.post("", response_model=KnowledgeBaseOut)
-def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db)):
+def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     kb = KnowledgeBase(
         name=payload.name,
         description=payload.description,
@@ -49,7 +49,7 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(ge
 
 
 @router.get("/{kb_id}", response_model=KnowledgeBaseOut)
-def get_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
+def get_knowledge_base(kb_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -57,7 +57,7 @@ def get_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{kb_id}")
-def delete_knowledge_base(kb_id: str, db: Session = Depends(get_db)):
+def delete_knowledge_base(kb_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -134,6 +134,7 @@ def upload_document(
     kb_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Upload a framework/algorithm TXT file.
 
@@ -189,6 +190,7 @@ def upload_simulation(
     program: UploadFile = File(..., description="The .py simulation program"),
     description: UploadFile = File(..., description="The companion .txt description"),
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Upload a simulation program (.py) paired with its companion description (.txt).
 
@@ -276,6 +278,7 @@ def upload_practicality_document(
     kb_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Upload a practicality network constraint/scoring TXT file.
 
@@ -329,6 +332,7 @@ def upload_smart(
     kb_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Smart upload: AI classifies document as framework or practicality,
     then extracts, optimizes, and embeds accordingly.
@@ -386,6 +390,7 @@ def upload_text(
     kb_id: str,
     payload: UploadTextRequest,
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Create a knowledge document from pasted text (no file upload required).
 
@@ -438,7 +443,7 @@ def upload_text(
 # ---------------------------------------------------------------------------
 
 @router.post("/{kb_id}/test-retrieval")
-def test_retrieval(kb_id: str, payload: TestRetrievalRequest, db: Session = Depends(get_db)):
+def test_retrieval(kb_id: str, payload: TestRetrievalRequest, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -454,6 +459,7 @@ def test_retrieval(kb_id: str, payload: TestRetrievalRequest, db: Session = Depe
 def get_density_bounds(
     kb_ids: str = Query(..., description="Comma-separated knowledge base IDs"),
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     """Return min and max token counts for density slider bounds."""
     id_list = [k.strip() for k in kb_ids.split(",") if k.strip()]

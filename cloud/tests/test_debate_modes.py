@@ -604,3 +604,98 @@ class TestCanonicalForm:
         result = _merge_solution_cluster(llm, sols, budget)
         assert "canonical_forms" in result.cluster_evidence
         assert len(result.cluster_evidence["canonical_forms"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# AC8: Audit Event Convention Tests
+# ---------------------------------------------------------------------------
+
+
+class TestAuditEventConvention:
+    """AC8: All audit events use _make_audit_details with consistent base fields."""
+
+    REQUIRED_FIELDS = {"event_version", "mode", "run_id", "timestamp_iso"}
+
+    def test_simple_mode_audit_events_have_base_fields(self):
+        """Every audit event in simple mode has event_version, mode, run_id, timestamp_iso."""
+        agent = _make_theory_agent()
+        llm = _make_mock_llm()
+        storage = _make_mock_storage([agent])
+        vs = _make_mock_vector_store()
+
+        inp = HivemindInput(query="test", theory_agent_ids=["t1"], analysis_mode="simple")
+        output = run_debate(inp, llm, vs, storage)
+
+        # Debate-level event types that must use _make_audit_details.
+        # agent_execution events come from agents.py and have their own schema.
+        _AGENT_MODULE_EVENTS = {"agent_call", "agent_execution"}
+
+        for event in output.audit_trail:
+            if event.details and event.event_type not in _AGENT_MODULE_EVENTS:
+                for field in self.REQUIRED_FIELDS:
+                    assert field in event.details, (
+                        f"Audit event '{event.event_type}' missing '{field}' in details: {event.details}"
+                    )
+                assert event.details["mode"] == "simple"
+                assert event.details["event_version"] == "v2"
+
+    def test_full_mode_audit_events_have_base_fields(self):
+        """Every audit event in full mode has event_version, mode, run_id, timestamp_iso."""
+        agent = _make_theory_agent()
+        llm = _make_mock_llm()
+        storage = _make_mock_storage([agent])
+        vs = _make_mock_vector_store()
+
+        inp = HivemindInput(query="test", theory_agent_ids=["t1"], analysis_mode="full")
+        output = run_debate(inp, llm, vs, storage)
+
+        _AGENT_MODULE_EVENTS = {"agent_call", "agent_execution"}
+
+        for event in output.audit_trail:
+            if event.details and event.event_type not in _AGENT_MODULE_EVENTS:
+                for field in self.REQUIRED_FIELDS:
+                    assert field in event.details, (
+                        f"Audit event '{event.event_type}' missing '{field}' in details: {event.details}"
+                    )
+                assert event.details["mode"] == "full"
+                assert event.details["event_version"] == "v2"
+
+    def test_run_id_consistent_across_all_events(self):
+        """All audit events in a single run share the same run_id."""
+        agent = _make_theory_agent()
+        llm = _make_mock_llm()
+        storage = _make_mock_storage([agent])
+        vs = _make_mock_vector_store()
+
+        inp = HivemindInput(query="test", theory_agent_ids=["t1"], analysis_mode="simple")
+        output = run_debate(inp, llm, vs, storage)
+
+        run_ids = set()
+        for event in output.audit_trail:
+            if event.details and "run_id" in event.details:
+                run_ids.add(event.details["run_id"])
+
+        assert len(run_ids) == 1, f"Expected 1 run_id, got {run_ids}"
+
+    def test_i6_streaming_equivalence(self):
+        """I6: Streaming and non-streaming produce semantically equivalent output."""
+        from hivemind_core.debate import run_debate_streaming
+
+        agent = _make_theory_agent()
+        llm = _make_mock_llm()
+        storage = _make_mock_storage([agent])
+        vs = _make_mock_vector_store()
+
+        inp = HivemindInput(query="test", theory_agent_ids=["t1"], analysis_mode="simple")
+
+        non_stream = run_debate(inp, llm, vs, storage)
+        stream_events = list(run_debate_streaming(inp, llm, vs, storage))
+        complete_events = [e for e in stream_events if e.get("type") == "complete"]
+        assert len(complete_events) == 1
+        stream_output = complete_events[0]["output"]
+
+        # Structural equivalence
+        assert non_stream.mode_used == stream_output.mode_used
+        assert non_stream.termination_reason == stream_output.termination_reason
+        assert len(non_stream.recommendations) == len(stream_output.recommendations)
+        assert non_stream.debate_rounds == stream_output.debate_rounds

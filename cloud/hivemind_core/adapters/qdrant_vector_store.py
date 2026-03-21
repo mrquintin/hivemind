@@ -54,17 +54,42 @@ class QdrantVectorStore(VectorStoreInterface):
         knowledge_base_ids: list[str],
         top_k: int = 8,
         similarity_threshold: float = 0.0,
+        document_ids: list[str] | None = None,
     ) -> list[RetrievedChunk]:
-        """Retrieve relevant chunks from knowledge bases."""
+        """Retrieve relevant chunks from knowledge bases.
+
+        If *document_ids* is provided, only chunks whose payload ``document_id``
+        is in the list are returned.
+        """
         if not knowledge_base_ids:
             return []
 
         # Embed the query
         query_embedding = self._embed([query])[0]
 
+        # Build an optional Qdrant filter for document_ids scoping
+        query_filter = None
+        if document_ids:
+            try:
+                from qdrant_client import models as qmodels
+
+                query_filter = qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="document_id",
+                            match=qmodels.MatchAny(any=document_ids),
+                        ),
+                    ]
+                )
+            except ImportError:
+                # qdrant_client not available — fall back to post-filtering
+                pass
+
         # Query each knowledge base collection
         all_results: list[tuple[str, float, dict]] = []
         client = self._get_client()
+        # When filtering by document_ids, fetch more to compensate for filter
+        search_limit = top_k * 5 if document_ids else top_k
 
         for kb_id in knowledge_base_ids:
             collection_name = f"kb_{kb_id}"
@@ -72,13 +97,19 @@ class QdrantVectorStore(VectorStoreInterface):
                 results = client.search(
                     collection_name=collection_name,
                     query_vector=query_embedding,
-                    limit=top_k,
+                    query_filter=query_filter,
+                    limit=search_limit,
                 )
                 for hit in results:
                     all_results.append((str(hit.id), float(hit.score), hit.payload or {}))
             except Exception:
                 # Collection might not exist
                 continue
+
+        # Post-filter by document_ids if query_filter wasn't applied (import fallback)
+        if document_ids and query_filter is None:
+            doc_set = set(document_ids)
+            all_results = [r for r in all_results if r[2].get("document_id") in doc_set]
 
         # Filter by threshold and sort
         filtered = [r for r in all_results if r[1] >= similarity_threshold]

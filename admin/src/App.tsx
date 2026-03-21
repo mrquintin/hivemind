@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
@@ -5,7 +6,9 @@ import TheoryFrameworks from "./pages/TheoryFrameworks";
 import Simulations from "./pages/Simulations";
 import PracticalityUnits from "./pages/PracticalityUnits";
 import Settings from "./pages/Settings";
+import Login from "./pages/Login";
 import { ConnectionProvider, useConnection } from "./contexts/ConnectionContext";
+import { getAuthToken, logout, getApiKeyStatus } from "./api/client";
 
 function ConnectionBanner() {
   const { status, retryCount } = useConnection();
@@ -40,13 +43,13 @@ function ConnectionBanner() {
   );
 }
 
-function AppContent() {
+function AppContent({ onLogout }: { onLogout: () => void }) {
   const { status } = useConnection();
 
   return (
     <div className="app-layout" style={{ marginTop: status !== "connected" ? "48px" : 0 }}>
       <ConnectionBanner />
-      <Sidebar />
+      <Sidebar onLogout={onLogout} />
       <main className="main-content">
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -61,10 +64,43 @@ function AppContent() {
 }
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  // On mount, try to restore session from stored token
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    // Validate the token with a lightweight authenticated request
+    getApiKeyStatus()
+      .then(() => setAuthenticated(true))
+      .catch(() => {
+        logout(); // Token expired or invalid — clear it
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    setAuthenticated(false);
+  }, []);
+
+  // Show nothing while checking stored token
+  if (checking) {
+    return null;
+  }
+
+  if (!authenticated) {
+    return <Login onSuccess={() => setAuthenticated(true)} />;
+  }
+
   return (
     <ConnectionProvider>
       <BrowserRouter>
-        <AppContent />
+        <AppContent onLogout={handleLogout} />
       </BrowserRouter>
     </ConnectionProvider>
   );

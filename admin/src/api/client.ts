@@ -31,6 +31,61 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// -----------------------------------------------------------------------------
+// Token Storage
+// -----------------------------------------------------------------------------
+
+let authToken: string | null = null;
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _decodeTokenExp(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function _scheduleTokenRefresh(): void {
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  const token = authToken || localStorage.getItem("hivemind_admin_token");
+  if (!token) return;
+  const exp = _decodeTokenExp(token);
+  if (!exp) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const delayMs = Math.max((exp - nowSec - 300) * 1000, 0);
+  _refreshTimer = setTimeout(async () => {
+    try {
+      const res = await request<{ access_token: string }>("/auth/refresh", {
+        method: "POST",
+      });
+      setAuthToken(res.access_token);
+    } catch {
+      // Refresh failed — user will need to re-login on next 401
+    }
+  }, delayMs);
+}
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+  if (token) {
+    localStorage.setItem("hivemind_admin_token", token);
+    _scheduleTokenRefresh();
+  } else {
+    localStorage.removeItem("hivemind_admin_token");
+    if (_refreshTimer) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (!authToken) {
+    authToken = localStorage.getItem("hivemind_admin_token");
+    if (authToken) _scheduleTokenRefresh();
+  }
+  return authToken;
+}
+
 function setActiveApiUrl(url: string, persist = false): string {
   const clean = normalizeApiUrl(url);
   API_URL = clean;
@@ -178,6 +233,12 @@ async function request<T>(
   const method = (options.method || "GET").toUpperCase();
   console.info(`[Hivemind API] ${method} ${url}`);
 
+  const token = getAuthToken();
+  const authHeaders: Record<string, string> = {};
+  if (token) {
+    authHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
   try {
     const res = await fetch(url, {
       ...options,
@@ -185,6 +246,7 @@ async function request<T>(
       credentials: options.credentials ?? "omit",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...options.headers,
       },
     });
@@ -204,6 +266,28 @@ async function request<T>(
     );
     throw error;
   }
+}
+
+// -----------------------------------------------------------------------------
+// Authentication
+// -----------------------------------------------------------------------------
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export async function login(username: string): Promise<AuthResponse> {
+  const response = await request<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+  setAuthToken(response.access_token);
+  return response;
+}
+
+export function logout(): void {
+  setAuthToken(null);
 }
 
 // -----------------------------------------------------------------------------
@@ -332,9 +416,14 @@ export async function uploadDocument(
   const formData = new FormData();
   formData.append("file", file);
 
+  const uploadHeaders: Record<string, string> = {};
+  const uploadToken = getAuthToken();
+  if (uploadToken) uploadHeaders["Authorization"] = `Bearer ${uploadToken}`;
+
   const res = await fetch(`${API_URL}/knowledge-bases/${kbId}/upload`, {
     method: "POST",
     body: formData,
+    headers: uploadHeaders,
   });
 
   if (!res.ok) {
@@ -377,9 +466,14 @@ export async function uploadSimulation(
   formData.append("program", program);
   formData.append("description", description);
 
+  const simHeaders: Record<string, string> = {};
+  const simToken = getAuthToken();
+  if (simToken) simHeaders["Authorization"] = `Bearer ${simToken}`;
+
   const res = await fetch(`${API_URL}/knowledge-bases/${kbId}/upload-simulation`, {
     method: "POST",
     body: formData,
+    headers: simHeaders,
   });
 
   if (!res.ok) {
@@ -401,9 +495,14 @@ export async function uploadPracticality(
   const formData = new FormData();
   formData.append("file", file);
 
+  const pracHeaders: Record<string, string> = {};
+  const pracToken = getAuthToken();
+  if (pracToken) pracHeaders["Authorization"] = `Bearer ${pracToken}`;
+
   const res = await fetch(`${API_URL}/knowledge-bases/${kbId}/upload-practicality`, {
     method: "POST",
     body: formData,
+    headers: pracHeaders,
   });
 
   if (!res.ok) {
@@ -432,9 +531,14 @@ export async function uploadSmart(
   const formData = new FormData();
   formData.append("file", file);
 
+  const smartHeaders: Record<string, string> = {};
+  const smartToken = getAuthToken();
+  if (smartToken) smartHeaders["Authorization"] = `Bearer ${smartToken}`;
+
   const res = await fetch(`${API_URL}/knowledge-bases/${kbId}/upload-smart`, {
     method: "POST",
     body: formData,
+    headers: smartHeaders,
   });
 
   if (!res.ok) {

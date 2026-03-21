@@ -382,51 +382,6 @@ def knowledge_browser(request: Request):
     finally:
         db.close()
 
-    def _escape(text: str) -> str:
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("\n", " ")
-
-    def _build_doc_rows(docs: list[dict], kb_id: str, icon: str) -> str:
-        rows = ""
-        for doc in docs:
-            storage = "S3" if doc["s3_path"].startswith("s3://") else "Local"
-            preview = _escape(doc["text_preview"])
-            preview_display = preview[:80] + ("..." if len(preview) > 80 else "")
-            rows += f'<tr class="doc-row" data-kb="{kb_id}"><td style="padding-left:48px;">{icon} {doc["filename"]}</td><td>{doc["content_type"]}</td><td>{doc["chunk_count"]}</td><td>{storage}</td><td>{doc["uploaded"]}</td><td><span class="preview" title="{preview}">{preview_display}</span></td></tr>'
-        return rows
-
-    # Build KB table rows
-    if not kb_data:
-        kb_rows = '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:40px;">No knowledge bases yet. Upload documents through the Admin app.</td></tr>'
-    else:
-        kb_rows = ""
-        for kb in kb_data:
-            all_doc_rows = ""
-            all_doc_rows += _build_doc_rows(kb["framework_docs"], kb["id"], "&#128196;")
-            all_doc_rows += _build_doc_rows(kb["simulation_docs"], kb["id"], "&#9881;")
-            all_doc_rows += _build_doc_rows(kb["practicality_docs"], kb["id"], "&#128736;")
-            desc = _escape((kb["description"] or "")[:100])
-            kb_rows += f'<tr class="kb-row" onclick="toggleDocs(\'{kb["id"]}\')">'
-            kb_rows += f'<td><strong>&#128218; {kb["name"]}</strong><br><span class="kb-desc">{desc}</span></td>'
-            kb_rows += f'<td>{kb["document_count"]} docs</td><td>{kb["chunk_count"]}</td>'
-            kb_rows += f'<td>{kb["total_tokens"]:,}</td><td>{kb["created"]}</td>'
-            kb_rows += f'<td>{kb["embedding_model"]}</td></tr>{all_doc_rows}'
-
-    # Build simulation formula rows
-    if not sim_data:
-        sim_rows = '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:40px;">No simulation formulas yet.</td></tr>'
-    else:
-        sim_rows = ""
-        for sf in sim_data:
-            input_names = ", ".join(i["name"] for i in sf["inputs"][:5])
-            output_names = ", ".join(o["name"] for o in sf["outputs"][:5])
-            tags = ", ".join(sf["tags"][:4])
-            desc = _escape((sf["description"] or "")[:100])
-            sim_rows += f'<tr><td><strong>{sf["name"]}</strong><br><span class="kb-desc">{desc}</span></td>'
-            sim_rows += f'<td>{sf["simulation_type"]}</td>'
-            sim_rows += f'<td>{input_names or "none"}</td>'
-            sim_rows += f'<td>{output_names or "none"}</td>'
-            sim_rows += f'<td>{sf["created"]}</td></tr>'
-
     # Count documents by type across all KBs
     total_framework_docs = sum(len(kb["framework_docs"]) for kb in kb_data)
     total_sim_docs = sum(len(kb["simulation_docs"]) for kb in kb_data)
@@ -437,8 +392,8 @@ def knowledge_browser(request: Request):
         "knowledge_browser.html",
         {
             "request": request,
-            "kb_rows": kb_rows,
-            "sim_rows": sim_rows,
+            "kb_data": kb_data,
+            "sim_data": sim_data,
             "kb_count": len(kb_data),
             "doc_count": sum(kb["document_count"] for kb in kb_data),
             "chunk_count": sum(kb["chunk_count"] for kb in kb_data),

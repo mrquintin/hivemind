@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.models.simulation_formula import SimulationFormula
 from app.schemas.simulation import (
     SimulationFormulaCreate,
@@ -16,12 +16,12 @@ router = APIRouter(prefix="/simulations", tags=["simulations"])
 
 
 @router.get("", response_model=list[SimulationFormulaOut])
-def list_formulas(db: Session = Depends(get_db)):
+def list_formulas(db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     return db.query(SimulationFormula).all()
 
 
 @router.post("", response_model=SimulationFormulaOut)
-def create_formula(payload: SimulationFormulaCreate, db: Session = Depends(get_db)):
+def create_formula(payload: SimulationFormulaCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     formula = SimulationFormula(**payload.model_dump())
     db.add(formula)
     db.commit()
@@ -30,7 +30,7 @@ def create_formula(payload: SimulationFormulaCreate, db: Session = Depends(get_d
 
 
 @router.get("/{formula_id}", response_model=SimulationFormulaOut)
-def get_formula(formula_id: str, db: Session = Depends(get_db)):
+def get_formula(formula_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     formula = db.query(SimulationFormula).filter(SimulationFormula.id == formula_id).first()
     if not formula:
         raise HTTPException(status_code=404, detail="Simulation formula not found")
@@ -38,7 +38,7 @@ def get_formula(formula_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{formula_id}", response_model=SimulationFormulaOut)
-def update_formula(formula_id: str, payload: SimulationFormulaUpdate, db: Session = Depends(get_db)):
+def update_formula(formula_id: str, payload: SimulationFormulaUpdate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     formula = db.query(SimulationFormula).filter(SimulationFormula.id == formula_id).first()
     if not formula:
         raise HTTPException(status_code=404, detail="Simulation formula not found")
@@ -51,7 +51,7 @@ def update_formula(formula_id: str, payload: SimulationFormulaUpdate, db: Sessio
 
 
 @router.delete("/{formula_id}")
-def delete_formula(formula_id: str, db: Session = Depends(get_db)):
+def delete_formula(formula_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     formula = db.query(SimulationFormula).filter(SimulationFormula.id == formula_id).first()
     if not formula:
         raise HTTPException(status_code=404, detail="Simulation formula not found")
@@ -61,7 +61,7 @@ def delete_formula(formula_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{formula_id}/run", response_model=SimulationRunResponse)
-def run_formula(formula_id: str, payload: SimulationRunRequest, db: Session = Depends(get_db)):
+def run_formula(formula_id: str, payload: SimulationRunRequest, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     formula = db.query(SimulationFormula).filter(SimulationFormula.id == formula_id).first()
     if not formula:
         raise HTTPException(status_code=404, detail="Simulation formula not found")

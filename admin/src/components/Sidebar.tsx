@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { checkServerHealth, getApiUrl, pingServer } from "../api/client";
+import { checkServerHealth, getApiUrl, pingServer, logout } from "../api/client";
 
 const NAV_ITEMS = [
   { path: "/", label: "Dashboard", icon: "◉" },
@@ -13,7 +13,11 @@ const NAV_ITEMS = [
 type ConnectionStatus = "checking" | "connected" | "disconnected";
 type PingStatus = "idle" | "pinging" | "success" | "error";
 
-export default function Sidebar() {
+interface SidebarProps {
+  onLogout: () => void;
+}
+
+export default function Sidebar({ onLogout }: SidebarProps) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [pingStatus, setPingStatus] = useState<PingStatus>("idle");
 
@@ -42,6 +46,11 @@ export default function Sidebar() {
       setPingStatus("error");
       setTimeout(() => setPingStatus("idle"), 2000);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    onLogout();
   };
 
   const statusColor = {
@@ -104,12 +113,24 @@ export default function Sidebar() {
           className="ping-button"
           onClick={handlePing}
           disabled={pingStatus === "pinging" || connectionStatus !== "connected"}
-          style={{ 
+          style={{
             backgroundColor: pingButtonColor,
             opacity: connectionStatus !== "connected" ? 0.5 : 1,
           }}
         >
           {pingButtonText}
+        </button>
+        <button
+          className="ping-button"
+          onClick={handleLogout}
+          style={{
+            backgroundColor: "transparent",
+            border: "1px solid #2a303d",
+            color: "#9aa4b8",
+            marginTop: 4,
+          }}
+        >
+          Logout
         </button>
         <div className="version-label">v0.1.0</div>
       </div>

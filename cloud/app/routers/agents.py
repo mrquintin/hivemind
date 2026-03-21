@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.models.agent import AgentDefinition
 from app.schemas.agent import AgentCreate, AgentOut, AgentTestRequest, AgentUpdate
 from app.services.agent_execution import execute_agent
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 def list_agents(
     db: Session = Depends(get_db),
     status: str | None = Query(None, description="Filter by status, e.g. 'published'"),
+    _user: dict = Depends(get_current_user),
 ):
     query = db.query(AgentDefinition)
     if status is not None:
@@ -23,7 +24,7 @@ def list_agents(
 
 
 @router.post("", response_model=AgentOut)
-def create_agent(payload: AgentCreate, db: Session = Depends(get_db)):
+def create_agent(payload: AgentCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = AgentDefinition(**payload.model_dump())
     db.add(agent)
     db.commit()
@@ -32,7 +33,7 @@ def create_agent(payload: AgentCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{agent_id}", response_model=AgentOut)
-def get_agent(agent_id: str, db: Session = Depends(get_db)):
+def get_agent(agent_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -40,7 +41,7 @@ def get_agent(agent_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{agent_id}", response_model=AgentOut)
-def update_agent(agent_id: str, payload: AgentUpdate, db: Session = Depends(get_db)):
+def update_agent(agent_id: str, payload: AgentUpdate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -55,7 +56,7 @@ def update_agent(agent_id: str, payload: AgentUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{agent_id}")
-def delete_agent(agent_id: str, db: Session = Depends(get_db)):
+def delete_agent(agent_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -65,7 +66,7 @@ def delete_agent(agent_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{agent_id}/publish")
-def publish_agent(agent_id: str, db: Session = Depends(get_db)):
+def publish_agent(agent_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -76,7 +77,7 @@ def publish_agent(agent_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{agent_id}/test")
-def test_agent(agent_id: str, payload: AgentTestRequest, db: Session = Depends(get_db)):
+def test_agent(agent_id: str, payload: AgentTestRequest, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")

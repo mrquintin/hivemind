@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.models.client_data import ClientData
 from app.schemas.client_data import ClientDataCreate, ClientDataOut
 
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/clients/{client_id}/data", tags=["client-data"])
 
 
 @router.get("", response_model=list[ClientDataOut])
-def list_client_data(client_id: str, db: Session = Depends(get_db)):
+def list_client_data(client_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     return db.query(ClientData).filter(ClientData.client_id == client_id).all()
 
 
@@ -18,6 +18,7 @@ def create_client_data(
     client_id: str,
     payload: ClientDataCreate,
     db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
 ):
     entry = ClientData(
         client_id=client_id,
@@ -32,7 +33,7 @@ def create_client_data(
 
 
 @router.get("/{data_id}", response_model=ClientDataOut)
-def get_client_data(client_id: str, data_id: str, db: Session = Depends(get_db)):
+def get_client_data(client_id: str, data_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     entry = (
         db.query(ClientData)
         .filter(ClientData.client_id == client_id, ClientData.id == data_id)
@@ -44,7 +45,7 @@ def get_client_data(client_id: str, data_id: str, db: Session = Depends(get_db))
 
 
 @router.delete("/{data_id}")
-def delete_client_data(client_id: str, data_id: str, db: Session = Depends(get_db)):
+def delete_client_data(client_id: str, data_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     entry = (
         db.query(ClientData)
         .filter(ClientData.client_id == client_id, ClientData.id == data_id)

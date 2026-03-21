@@ -1,0 +1,129 @@
+You are a principal-level systems architect + full-stack engineer working inside this repository.
+All remaining work on the Hivemind v2 debate engine has been completed.
+This document serves as the authoritative record of what was built.
+
+===============================================================================
+0) IMPLEMENTATION — COMPLETE
+===============================================================================
+
+123 tests passing, 0 warnings (+ 14 auth tests when PyJWT installed).
+All acceptance criteria (AC1–AC12) met.
+
+Backend core (cloud/hivemind_core/):
+  types.py       — AnalysisMode, EffortLevel, TerminationReason,
+                   RecommendationStatus enums; BudgetUsage, RepairStats,
+                   BudgetExhausted; EFFORT_DEFAULTS; new fields on
+                   HivemindInput, HivemindOutput, Recommendation,
+                   AggregatedSolution; StorageInterface with
+                   get_documents_for_knowledge_bases(); VectorStoreInterface
+                   with document_ids filter param.
+  debate.py      — run_simple_mode(), run_full_mode(),
+                   apply_practicality_scoring(),
+                   repair_failed_recommendations(),
+                   cluster_solutions_monitor_v2() (3-stage: embedding → LLM
+                   adjudication → canonical merge).  _BudgetGuard,
+                   _StagnationDetector.  _make_audit_details() called by
+                   every audit event (mode + run_id threaded through).
+                   Resilient I4 guards (logging + demotion, not bare assert).
+                   All datetime calls use timezone-aware datetime.now(timezone.utc).
+                   Streaming uses thread+queue pattern.
+  agents.py      — build_theory_prompt() SOLUTION/REASONING format;
+                   execute_agent() supports document_ids + tool_calls.
+                   Timezone-aware timestamps.
+  engine.py      — Mode/effort pass-through.
+  interfaces.py  — Re-exports from types.py, InMemoryStorage helper.
+  simulations.py — simulations_to_tools() produces Anthropic tool defs.
+  llm.py         — ClaudeLLM passes tools to API, parses tool_use blocks.
+  adapters/qdrant_vector_store.py — retrieve() supports document_ids with
+                   server-side MatchAny filter (qdrant_client) and post-query
+                   fallback.  Scoped RAG for dynamic units works end-to-end.
+
+Backend API (cloud/app/):
+  deps.py        — get_current_user (operator), get_current_client (client),
+                   get_any_authenticated (either role), _decode_token().
+  All routers    — JWT auth enforced:
+    Admin (agents, knowledge_bases, simulations, settings, clients,
+      client_data, scraped_sources): Depends(get_current_user).
+    Shared (analysis, sync): Depends(get_any_authenticated).
+    Public: /health, /health/detailed, /admin/ping, /admin/ping-status,
+      /dashboard, /knowledge-browser, /auth/login, /auth/client-connect.
+  routers/auth.py — /auth/login, /auth/client-connect, /auth/me (returns
+                   username, role, client_id), /auth/refresh (re-issues token
+                   with same sub/role and fresh expiry).
+  routers/analysis.py — Per-user rate limiter (10 req/60s) applied to
+                   /analysis/run and /analysis/run/stream.
+  ws/handlers.py — Both WebSocket endpoints validate JWT from ?token= query
+                   param before accepting.  Invalid/missing → close code 4001.
+  config.py      — CORS_ORIGINS defaults to explicit Tauri/localhost origins
+                   instead of wildcard "*".
+  schemas/analysis.py — Full request/response types.
+  adapters/storage.py — PostgresStorage.get_documents_for_knowledge_bases().
+  adapters/vector_db.py — QdrantVectorDB.retrieve() filters by document_ids.
+  main.py        — knowledge_browser passes structured data to Jinja2.
+  templates/     — dashboard.html, knowledge_browser.html (Jinja2 loops).
+
+Client (client/src/):
+  api/client.ts  — All types, auth headers, getDensityBounds(), streaming.
+                   connectToAnalysisStream() passes JWT as ?token= query param.
+                   getMe(), listClientData(), createClientData(), deleteClientData().
+                   Proactive token refresh (decodes JWT exp, refreshes 5 min
+                   before expiry via /auth/refresh).
+  App.tsx        — Mode/effort selectors, density slider uses server-provided
+                   bounds, repair phase step, output modal.
+                   "My Data" panel: persistent saved entries via server CRUD,
+                   add/delete entries, entries auto-included in analysis context.
+  styles.css     — Full styling including My Data section.
+
+Admin (admin/src/):
+  api/client.ts  — setAuthToken/getAuthToken, login()/logout(), Authorization
+                   headers on all requests including FormData uploads.
+                   Proactive token refresh (same mechanism as client).
+  App.tsx        — Auth gate: checks stored token on mount, validates with
+                   getApiKeyStatus(), renders Login or BrowserRouter.
+  pages/Login.tsx — Username input, dark-theme login card, error handling.
+  components/Sidebar.tsx — Logout button, onLogout callback.
+
+Tests (cloud/tests/):
+  test_types.py              — 20 tests.
+  test_debate_helpers.py     — 19 tests.
+  test_debate_modes.py       — 17 tests (audit convention, I4, I5, I6).
+  test_simulations.py        — 4 tests.
+  test_canonical_forms.py    — 25 tests (extraction, contradiction, merge).
+  test_critique_revision.py  — 7 tests (parse critique, revision prompt).
+  test_dynamic_units.py      — 7 tests (density-based unit creation).
+  test_practicality.py       — 5 tests (scoring, partial, audit convention).
+  test_qdrant_filtering.py   — 7 tests (document_ids filter, threshold, limits).
+  test_auth.py               — 14 tests (JWT deps; requires PyJWT — skips if absent).
+  Total: 123 passing + 14 auth = 137. 0 warnings.
+
+Evaluation (cloud/scripts/):
+  benchmark_modes.py, benchmark_prompts.json, benchmark_report.md.
+
+
+===============================================================================
+1) FUTURE WORK — NOT BLOCKING
+===============================================================================
+
+These items are out of scope for the current sprint.  They are noted here for
+future planning.
+
+A) Client data management Phase B (internet scraping).
+   The scraped_sources backend is a stub (raw urllib fetch).  Full Phase B
+   requires: HTML-to-text extraction (BeautifulSoup), rate limiting, caching,
+   content safety filtering, analysis pipeline integration, client UI.
+   Scope as a separate initiative.
+
+B) File upload in client "My Data" panel.
+   Currently supports paste-only text entries.  Adding file upload (PDF, DOCX)
+   would require a multipart upload endpoint and client-side file picker.
+
+C) Automated integration tests.
+   Current tests are unit tests using mocks.  Adding FastAPI TestClient-based
+   integration tests for the full request → engine → response path would
+   catch API-level regressions.
+
+D) CI/CD pipeline.
+   No CI pipeline exists.  Adding GitHub Actions with:
+   - pytest (all tests including auth with PyJWT)
+   - TypeScript type-checking (tsc --noEmit) for client + admin
+   - Linting (ruff for Python, eslint for TypeScript)

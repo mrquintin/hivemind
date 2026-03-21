@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.deps import get_db
+from app.deps import get_db, _decode_token
 from hivemind_core import (
     ClaudeLLM,
     HivemindInput,
@@ -52,6 +52,26 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def _authenticate_websocket(websocket: WebSocket) -> dict | None:
+    """Validate JWT from query param ``token``.
+
+    Returns the decoded payload on success, or *None* after closing
+    the socket with code 4001 on failure.
+    """
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing auth token")
+        return None
+    try:
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        return _decode_token(creds)
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return None
 
 
 def _serialize_datetime(obj: Any) -> Any:
@@ -110,6 +130,10 @@ async def websocket_analysis(
             "result": {...}
         }
     """
+    user = await _authenticate_websocket(websocket)
+    if user is None:
+        return
+
     await manager.connect(websocket, client_id)
 
     try:
@@ -323,6 +347,10 @@ async def websocket_simulation(
             "variables": {...}
         }
     """
+    user = await _authenticate_websocket(websocket)
+    if user is None:
+        return
+
     await manager.connect(websocket, client_id)
 
     try:

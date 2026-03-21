@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.deps import get_current_user
 from app.secrets import encrypt_api_key, decrypt_api_key, read_api_key_file, write_api_key_file
 from app.runtime_paths import settings_file
 
@@ -30,7 +31,7 @@ class ApiKeyPayload(BaseModel):
 
 
 @router.post("/api-key")
-def set_api_key(payload: ApiKeyPayload):
+def set_api_key(payload: ApiKeyPayload, _user: dict = Depends(get_current_user)):
     """Store the Anthropic API key (encrypted at rest)."""
     key = payload.api_key.strip()
     if not key.startswith("sk-"):
@@ -47,7 +48,7 @@ def set_api_key(payload: ApiKeyPayload):
 
 
 @router.get("/api-key-status")
-def get_api_key_status():
+def get_api_key_status(_user: dict = Depends(get_current_user)):
     """Check whether an API key is configured (does not reveal the key)."""
     # Check .api_key file first (primary)
     key = read_api_key_file()

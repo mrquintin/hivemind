@@ -169,16 +169,56 @@ export function setAuthToken(token: string | null) {
   authToken = token;
   if (token) {
     localStorage.setItem("hivemind_token", token);
+    _scheduleTokenRefresh();
   } else {
     localStorage.removeItem("hivemind_token");
+    if (_refreshTimer) { clearTimeout(_refreshTimer); _refreshTimer = null; }
   }
 }
 
 export function getAuthToken(): string | null {
   if (!authToken) {
     authToken = localStorage.getItem("hivemind_token");
+    if (authToken) _scheduleTokenRefresh();
   }
   return authToken;
+}
+
+// -----------------------------------------------------------------------------
+// Proactive Token Refresh
+// -----------------------------------------------------------------------------
+
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _decodeTokenExp(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function _scheduleTokenRefresh(): void {
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  const token = getAuthToken();
+  if (!token) return;
+  const exp = _decodeTokenExp(token);
+  if (!exp) return;
+  // Refresh 5 minutes before expiry (or immediately if < 5 min remain)
+  const nowSec = Math.floor(Date.now() / 1000);
+  const delayMs = Math.max((exp - nowSec - 300) * 1000, 0);
+  _refreshTimer = setTimeout(async () => {
+    try {
+      const res = await request<{ access_token: string }>("/auth/refresh", {
+        method: "POST",
+      });
+      setAuthToken(res.access_token);
+      _scheduleTokenRefresh(); // schedule next refresh
+    } catch {
+      // Token refresh failed — user will need to re-login on next 401
+    }
+  }, delayMs);
 }
 
 // -----------------------------------------------------------------------------
@@ -299,6 +339,30 @@ export async function getAnalysisAudit(analysisId: string): Promise<{ audit_trai
 }
 
 // -----------------------------------------------------------------------------
+// Density Bounds
+// -----------------------------------------------------------------------------
+
+export interface DensityBounds {
+  min_doc_tokens: number;
+  sum_all_doc_tokens: number;
+}
+
+/**
+ * Fetch density bounds from the server for the given knowledge base IDs.
+ * Falls back to null if the endpoint fails or returns no data.
+ */
+export async function getDensityBounds(kbIds: string[]): Promise<DensityBounds | null> {
+  if (!kbIds.length) return null;
+  try {
+    return await request<DensityBounds>(
+      `/knowledge-bases/density-bounds?kb_ids=${kbIds.join(",")}`
+    );
+  } catch {
+    return null;
+  }
+}
+
+// -----------------------------------------------------------------------------
 // SSE Streaming Analysis
 // -----------------------------------------------------------------------------
 
@@ -415,7 +479,11 @@ export function connectToAnalysisStream(
   callbacks: StreamCallbacks
 ): WebSocket {
   const wsUrl = API_URL.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-  const ws = new WebSocket(`${wsUrl}/ws/analysis/${analysisId}`);
+  const token = getAuthToken();
+  const wsUri = token
+    ? `${wsUrl}/ws/analysis/${analysisId}?token=${encodeURIComponent(token)}`
+    : `${wsUrl}/ws/analysis/${analysisId}`;
+  const ws = new WebSocket(wsUri);
 
   ws.onmessage = (event) => {
     try {
@@ -460,6 +528,51 @@ export function connectToAnalysisStream(
   };
 
   return ws;
+}
+
+// -----------------------------------------------------------------------------
+// Identity
+// -----------------------------------------------------------------------------
+
+export interface UserIdentity {
+  username: string;
+  role: string;
+  client_id: string;
+}
+
+export async function getMe(): Promise<UserIdentity> {
+  return request<UserIdentity>("/auth/me");
+}
+
+// -----------------------------------------------------------------------------
+// Client Data (persistent context entries)
+// -----------------------------------------------------------------------------
+
+export interface ClientDataEntry {
+  id: string;
+  client_id: string;
+  label: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function listClientData(clientId: string): Promise<ClientDataEntry[]> {
+  return request<ClientDataEntry[]>(`/clients/${clientId}/data`);
+}
+
+export async function createClientData(
+  clientId: string,
+  label: string,
+  content: string,
+): Promise<ClientDataEntry> {
+  return request<ClientDataEntry>(`/clients/${clientId}/data`, {
+    method: "POST",
+    body: JSON.stringify({ label, content }),
+  });
+}
+
+export async function deleteClientData(clientId: string, dataId: string): Promise<void> {
+  await request(`/clients/${clientId}/data/${dataId}`, { method: "DELETE" });
 }
 
 // -----------------------------------------------------------------------------

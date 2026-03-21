@@ -3,7 +3,9 @@ Analysis endpoints - thin wrapper around Hivemind Core engine.
 """
 from __future__ import annotations
 
+import collections
 import dataclasses
+import threading
 import time
 from typing import Any
 
@@ -11,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+from app.deps import get_any_authenticated, get_db
 from app.engine import create_engine
 from app.models.agent import AgentDefinition
 from app.models.analysis import AnalysisResult
@@ -28,6 +30,32 @@ from hivemind_core import HivemindInput
 from hivemind_core.types import ContextItem, ContextType
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
+
+
+# ---------------------------------------------------------------------------
+# Lightweight per-user rate limiter (no external dependency)
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_MAX = 10           # max requests per window
+_RATE_LIMIT_WINDOW_S = 60      # window size in seconds
+_rate_lock = threading.Lock()
+_rate_buckets: dict[str, collections.deque] = {}
+
+
+def _check_rate_limit(user_id: str) -> None:
+    """Raise 429 if the user exceeds _RATE_LIMIT_MAX requests in the window."""
+    now = time.monotonic()
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(user_id, collections.deque())
+        # Evict timestamps outside the window
+        while bucket and bucket[0] < now - _RATE_LIMIT_WINDOW_S:
+            bucket.popleft()
+        if len(bucket) >= _RATE_LIMIT_MAX:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Max {_RATE_LIMIT_MAX} analysis requests per {_RATE_LIMIT_WINDOW_S}s.",
+            )
+        bucket.append(now)
 
 
 def _resolve_agents_by_profile_and_decision(
@@ -169,8 +197,9 @@ def _repair_stats_to_out(rs) -> RepairStatsOut:
 
 
 @router.post("/run", response_model=AnalysisResultOut)
-def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
+def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db), _client: dict = Depends(get_any_authenticated)):
     """Run a strategic analysis using the Hivemind Core engine."""
+    _check_rate_limit(_client["sub"])
     theory_ids, practicality_ids = _resolve_agents_by_profile_and_decision(
         db,
         payload.use_case_profile,
@@ -232,8 +261,9 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/run/stream")
-async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends(get_db)):
+async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends(get_db), _client: dict = Depends(get_any_authenticated)):
     """Run analysis with streaming progress updates."""
+    _check_rate_limit(_client["sub"])
     theory_ids, practicality_ids = _resolve_agents_by_profile_and_decision(
         db,
         payload.use_case_profile,
@@ -282,7 +312,7 @@ async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends
 
 
 @router.get("/{analysis_id}")
-def get_analysis(analysis_id: str, db: Session = Depends(get_db)):
+def get_analysis(analysis_id: str, db: Session = Depends(get_db), _client: dict = Depends(get_any_authenticated)):
     """Get a previous analysis by ID."""
     analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id).first()
     if not analysis:
@@ -291,7 +321,7 @@ def get_analysis(analysis_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{analysis_id}/audit")
-def get_audit(analysis_id: str, db: Session = Depends(get_db)):
+def get_audit(analysis_id: str, db: Session = Depends(get_db), _client: dict = Depends(get_any_authenticated)):
     """Get the audit trail for an analysis."""
     analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id).first()
     if not analysis:

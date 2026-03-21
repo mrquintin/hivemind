@@ -68,3 +68,16 @@ def get_current_client(
             detail="Client role required",
         )
     return payload
+
+
+def get_any_authenticated(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """Decode JWT and return payload. Accepts any valid role (operator or client)."""
+    payload = _decode_token(credentials)
+    if payload.get("role") not in ("operator", "client"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Valid role required",
+        )
+    return payload

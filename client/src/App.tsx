@@ -16,6 +16,12 @@ import {
   type AnalysisResult,
   type StreamEvent,
   type Recommendation,
+  getDensityBounds,
+  getMe,
+  listClientData,
+  createClientData,
+  deleteClientData,
+  type ClientDataEntry,
 } from "./api/client";
 
 // ---------------------------------------------------------------------------
@@ -316,6 +322,8 @@ export default function App() {
 
   // --- Form inputs (advanced / experimental) ---
   const [density, setDensity] = useState(8000);
+  const [densityMin, setDensityMin] = useState(1000);
+  const [densityMax, setDensityMax] = useState(50000);
   const [densityMode, setDensityMode] = useState(true);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.65);
   const [revisionStrength, setRevisionStrength] = useState(0.5);
@@ -327,6 +335,11 @@ export default function App() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDataPanel, setShowDataPanel] = useState(false);
   const [contextText, setContextText] = useState("");
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientDataEntries, setClientDataEntries] = useState<ClientDataEntry[]>([]);
+  const [newEntryLabel, setNewEntryLabel] = useState("");
+  const [newEntryContent, setNewEntryContent] = useState("");
+  const [savingEntry, setSavingEntry] = useState(false);
 
   // --- Analysis state ---
   const [analysisStep, setAnalysisStep] = useState<AnalysisStep>("initializing");
@@ -380,6 +393,40 @@ export default function App() {
     };
   }, [runHealthCheck]);
 
+  // --- Fetch density bounds from server ---
+  const fetchDensityBounds = useCallback(async (agentList: Agent[]) => {
+    const kbIds = new Set<string>();
+    for (const a of agentList) {
+      if (a.network_type === "theory") {
+        // Agent may have knowledge_base_ids on the full object
+        const ids = (a as unknown as { knowledge_base_ids?: string[] }).knowledge_base_ids;
+        if (ids) ids.forEach((id) => kbIds.add(id));
+      }
+    }
+    if (kbIds.size === 0) return;
+    const bounds = await getDensityBounds(Array.from(kbIds));
+    if (bounds && bounds.sum_all_doc_tokens > 0) {
+      const min = Math.max(bounds.min_doc_tokens, 500);
+      const max = bounds.sum_all_doc_tokens;
+      setDensityMin(min);
+      setDensityMax(max);
+      // Clamp current density to new range
+      setDensity((prev) => Math.max(min, Math.min(max, prev)));
+    }
+  }, []);
+
+  // --- Fetch client identity and saved data ---
+  const fetchClientData = useCallback(async () => {
+    try {
+      const me = await getMe();
+      setClientId(me.client_id);
+      const entries = await listClientData(me.client_id);
+      setClientDataEntries(entries);
+    } catch {
+      // Non-critical — client data panel just stays empty
+    }
+  }, []);
+
   // --- Restore session ---
   useEffect(() => {
     const token = getAuthToken();
@@ -389,12 +436,14 @@ export default function App() {
           setAgents(a);
           setUsername("(session restored)");
           setPhase("main");
+          fetchDensityBounds(a);
+          fetchClientData();
         })
         .catch(() => {
           // Token expired
         });
     }
-  }, []);
+  }, [fetchDensityBounds, fetchClientData]);
 
   // ---------------------------------------------------------------------------
   // Login handler
@@ -410,6 +459,8 @@ export default function App() {
       try {
         const a = await listPublishedAgents();
         setAgents(a);
+        fetchDensityBounds(a);
+        fetchClientData();
       } catch {
         // Will retry later
       }
@@ -434,7 +485,10 @@ export default function App() {
       problem_statement: problemText,
       analysis_mode: analysisMode,
       effort_level: effortLevel,
-      context_document_texts: contextText.trim() ? [contextText.trim()] : [],
+      context_document_texts: [
+        ...clientDataEntries.map((e) => e.content).filter(Boolean),
+        ...(contextText.trim() ? [contextText.trim()] : []),
+      ],
       sufficiency_value: sufficiency,
       feasibility_threshold: feasibility,
       theory_network_density: densityMode ? density : null,
@@ -919,11 +973,11 @@ export default function App() {
                     <SliderWithInput
                       label="Theory network density"
                       value={density}
-                      min={500}
-                      max={50000}
+                      min={densityMin}
+                      max={densityMax}
                       step={500}
-                      minLabel="500 tokens"
-                      maxLabel="50,000 tokens"
+                      minLabel={`${densityMin.toLocaleString()} tokens`}
+                      maxLabel={`${densityMax.toLocaleString()} tokens`}
                       onChange={setDensity}
                     />
                   )}
@@ -1087,6 +1141,76 @@ export default function App() {
                   value={contextText}
                   onChange={(e) => setContextText(e.target.value)}
                 />
+
+                {/* My Data — persistent entries */}
+                <div className="my-data-section">
+                  <div className="my-data-header">
+                    <span className="my-data-title">My Saved Data</span>
+                    <span className="my-data-count">{clientDataEntries.length} entries</span>
+                  </div>
+
+                  {clientDataEntries.length > 0 && (
+                    <div className="my-data-list">
+                      {clientDataEntries.map((entry) => (
+                        <div key={entry.id} className="data-entry-row">
+                          <div className="data-entry-info">
+                            <span className="data-entry-label">{entry.label}</span>
+                            <span className="data-entry-preview">
+                              {entry.content.slice(0, 100)}{entry.content.length > 100 ? "..." : ""}
+                            </span>
+                          </div>
+                          <button
+                            className="data-entry-delete"
+                            onClick={async () => {
+                              if (!clientId) return;
+                              try {
+                                await deleteClientData(clientId, entry.id);
+                                setClientDataEntries((prev) => prev.filter((e) => e.id !== entry.id));
+                              } catch { /* ignore */ }
+                            }}
+                            aria-label="Delete"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="data-add-form">
+                    <input
+                      type="text"
+                      className="data-add-label"
+                      placeholder="Label (e.g. Q4 Report)"
+                      value={newEntryLabel}
+                      onChange={(e) => setNewEntryLabel(e.target.value)}
+                    />
+                    <textarea
+                      className="data-add-content"
+                      placeholder="Paste content..."
+                      value={newEntryContent}
+                      onChange={(e) => setNewEntryContent(e.target.value)}
+                      rows={3}
+                    />
+                    <button
+                      className="btn btn-secondary data-add-save"
+                      disabled={!newEntryLabel.trim() || !newEntryContent.trim() || !clientId || savingEntry}
+                      onClick={async () => {
+                        if (!clientId || !newEntryLabel.trim() || !newEntryContent.trim()) return;
+                        setSavingEntry(true);
+                        try {
+                          const created = await createClientData(clientId, newEntryLabel.trim(), newEntryContent.trim());
+                          setClientDataEntries((prev) => [...prev, created]);
+                          setNewEntryLabel("");
+                          setNewEntryContent("");
+                        } catch { /* ignore */ }
+                        setSavingEntry(false);
+                      }}
+                    >
+                      {savingEntry ? "Saving..." : "Save entry"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

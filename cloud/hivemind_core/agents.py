@@ -4,7 +4,7 @@ Handles the construction of system prompts and execution of individual agents.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from hivemind_core.rag import format_chunks_for_prompt, retrieve_chunks
 from hivemind_core.simulations import (
@@ -228,7 +228,7 @@ def execute_agent(
 
     # Build the audit event
     audit_event = AuditEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         event_type="agent_execution",
         agent_id=agent_id,
         retrieved_chunk_ids=chunk_ids,

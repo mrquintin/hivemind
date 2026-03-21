@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.deps import get_db
+from app.deps import get_any_authenticated, get_db
 from app.models.client import Client
 from app.routers.settings import get_active_api_key
 from app.schemas.auth import ClientConnectRequest, LoginRequest, TokenResponse
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _create_token(subject: str, extra: dict | None = None) -> str:
     payload = {
         "sub": subject,
-        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRES_MINUTES),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRES_MINUTES),
     }
     if extra:
         payload.update(extra)
@@ -63,7 +63,20 @@ def client_connect(payload: ClientConnectRequest, db: Session = Depends(get_db))
     return TokenResponse(access_token=token)
 
 
+@router.get("/me")
+def get_me(current_user: dict = Depends(get_any_authenticated)):
+    """Return the identity of the currently authenticated user."""
+    return {
+        "username": current_user["sub"],
+        "role": current_user["role"],
+        "client_id": current_user["sub"],
+    }
+
+
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_token(payload: TokenResponse) -> TokenResponse:
-    token = _create_token("refresh", {"role": "refresh"})
+def refresh_token(
+    current_user: dict = Depends(get_any_authenticated),
+) -> TokenResponse:
+    """Re-issue a token with the same sub/role and a fresh expiry."""
+    token = _create_token(current_user["sub"], {"role": current_user["role"]})
     return TokenResponse(access_token=token)

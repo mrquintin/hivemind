@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Any, Generator
 
 from hivemind_core.agents import execute_agent
@@ -59,7 +60,7 @@ def _make_audit_details(
         "mode": mode,
         "round": round,
         "run_id": run_id,
-        "timestamp_iso": datetime.utcnow().isoformat() + "Z",
+        "timestamp_iso": datetime.now(timezone.utc).isoformat() + "Z",
     }
     base.update(extra)
     return base
@@ -396,6 +397,9 @@ def cluster_solutions_monitor_v2(
     similarity_threshold: float = 0.65,
     threshold_low: float = 0.55,
     threshold_high: float = 0.80,
+    *,
+    mode: str = "",
+    run_id: str = "",
 ) -> tuple[list[AggregatedSolution], list[AuditEvent]]:
     """Three-stage clustering pipeline (Monitor v2).
 
@@ -433,14 +437,14 @@ def cluster_solutions_monitor_v2(
             adjudications[(i, j)] = result
             if result.get("rationale") == "parse_fallback":
                 audit_events.append(AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="monitor_parse_fallback",
-                    details={
-                        "event_version": "v2",
-                        "solution_i": solutions[i].unit_id,
-                        "solution_j": solutions[j].unit_id,
-                        "embedding_score": score,
-                    },
+                    details=_make_audit_details(
+                        mode, run_id,
+                        solution_i=solutions[i].unit_id,
+                        solution_j=solutions[j].unit_id,
+                        embedding_score=score,
+                    ),
                 ))
 
     # Build adjacency for clustering
@@ -524,17 +528,17 @@ def cluster_solutions_monitor_v2(
 
     # Emit monitor audit event
     audit_events.append(AuditEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         event_type="monitor_v2_clustering",
-        details={
-            "event_version": "v2",
-            "total_solutions": n,
-            "clusters_formed": len(clusters),
-            "llm_adjudications": sum(
+        details=_make_audit_details(
+            mode, run_id,
+            total_solutions=n,
+            clusters_formed=len(clusters),
+            llm_adjudications=sum(
                 1 for adj in adjudications.values()
                 if adj.get("rationale") not in ("high_embedding", "low_embedding")
             ),
-        },
+        ),
     ))
 
     return aggregated, audit_events
@@ -895,6 +899,9 @@ def apply_practicality_scoring(
     budget: _BudgetGuard,
     audit_trail: list[AuditEvent],
     on_event: Any = None,
+    *,
+    mode: str = "",
+    run_id: str = "",
 ) -> None:
     """Score each recommendation using practicality agents. Mutates recommendations in-place."""
     if not practicality_agent_ids:
@@ -928,15 +935,15 @@ def apply_practicality_scoring(
                     rec.average_feasibility = sum(fs.score for fs in feasibility_scores) / len(feasibility_scores)
                 rec.partial_scoring = True
                 audit_trail.append(AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="partial_practicality_scoring",
-                    details={
-                        "event_version": "v2",
-                        "rec_id": rec.id,
-                        "agents_scored": len(feasibility_scores),
-                        "agents_total": len(practicality_agents),
-                        "reason": "budget_exhausted",
-                    },
+                    details=_make_audit_details(
+                        mode, run_id,
+                        rec_id=rec.id,
+                        agents_scored=len(feasibility_scores),
+                        agents_total=len(practicality_agents),
+                        reason="budget_exhausted",
+                    ),
                 ))
                 return
 
@@ -1002,6 +1009,9 @@ def repair_failed_recommendations(
     audit_trail: list[AuditEvent],
     repair_stats: RepairStats,
     on_event: Any = None,
+    *,
+    mode: str = "",
+    run_id: str = "",
 ) -> None:
     """Per-recommendation repair loop. Mutates recommendations in-place.
 
@@ -1092,6 +1102,7 @@ CHANGES MADE: [list of specific changes]"""
                 input_data.practicality_agent_ids,
                 input_data, llm, vector_store, storage,
                 budget, audit_trail,
+                mode=mode, run_id=run_id,
             )
 
             rec.repair_history.append({
@@ -1102,15 +1113,15 @@ CHANGES MADE: [list of specific changes]"""
             })
 
             audit_trail.append(AuditEvent(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 event_type="repair_iteration",
-                details={
-                    "event_version": "v2",
-                    "rec_id": rec.id,
-                    "iteration": iteration + 1,
-                    "score_before": old_score,
-                    "score_after": rec.average_feasibility,
-                },
+                details=_make_audit_details(
+                    mode, run_id,
+                    rec_id=rec.id,
+                    iteration=iteration + 1,
+                    score_before=old_score,
+                    score_after=rec.average_feasibility,
+                ),
             ))
 
             if on_event:
@@ -1143,6 +1154,9 @@ def _resolve_theory_agents(
     input_data: HivemindInput,
     storage: StorageInterface,
     audit_trail: list[AuditEvent],
+    *,
+    mode: str = "",
+    run_id: str = "",
 ) -> tuple[list[AgentDefinition], int]:
     """Resolve theory agents from input config. Returns (agents, units_created)."""
     theory_agents: list[AgentDefinition] = []
@@ -1166,13 +1180,14 @@ def _resolve_theory_agents(
         theory_agents = [_dynamic_unit_to_agent(unit, all_kb_ids) for unit in dynamic_units]
 
         audit_trail.append(AuditEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type="dynamic_units_created",
-            details={
-                "density_value": input_data.theory_network_density,
-                "units_created": len(dynamic_units),
-                "total_documents": len(all_kb_ids),
-            },
+            details=_make_audit_details(
+                mode, run_id,
+                density_value=input_data.theory_network_density,
+                units_created=len(dynamic_units),
+                total_documents=len(all_kb_ids),
+            ),
         ))
     else:
         theory_agent_ids = input_data.theory_agent_ids or input_data.agent_ids
@@ -1194,6 +1209,9 @@ def _generate_initial_solutions(
     budget: _BudgetGuard,
     audit_trail: list[AuditEvent],
     on_event: Any = None,
+    *,
+    mode: str = "",
+    run_id: str = "",
 ) -> list[TheoryUnitSolution]:
     """Generate one solution per theory agent."""
     solutions: list[TheoryUnitSolution] = []
@@ -1230,9 +1248,9 @@ def _generate_initial_solutions(
             on_event({"type": "solution_generated", "agent_id": agent.id, "agent_name": agent.name})
 
     audit_trail.append(AuditEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         event_type="initial_solutions_generated",
-        details={"count": len(solutions)},
+        details=_make_audit_details(mode, run_id, count=len(solutions)),
     ))
 
     return solutions
@@ -1269,7 +1287,9 @@ def run_simple_mode(
         on_event({"type": "debate_start", "query": input_data.query, "mode": "simple"})
 
     # Step 1: Resolve theory agents
-    theory_agents, theory_units_created = _resolve_theory_agents(input_data, storage, audit_trail)
+    theory_agents, theory_units_created = _resolve_theory_agents(
+        input_data, storage, audit_trail, mode="simple", run_id=run_id,
+    )
 
     if not theory_agents:
         # F4: No theory agents resolved
@@ -1279,9 +1299,9 @@ def run_simple_mode(
             mode_used="simple",
             budget_usage=budget.finalize(),
             audit_trail=[AuditEvent(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 event_type="error",
-                details={"error": "No theory agents found or created. Ensure theory agents are configured or density is set."},
+                details=_make_audit_details("simple", run_id, error="No theory agents found or created. Ensure theory agents are configured or density is set."),
             )],
         )
 
@@ -1289,11 +1309,13 @@ def run_simple_mode(
         on_event({"type": "units_created", "count": theory_units_created})
 
     audit_trail.append(AuditEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         event_type="debate_start",
-        details={"event_version": "v2", "mode": "simple", "run_id": run_id,
-                 "theory_agents": len(theory_agents),
-                 "practicality_agents": len(input_data.practicality_agent_ids)},
+        details=_make_audit_details(
+            "simple", run_id,
+            theory_agents=len(theory_agents),
+            practicality_agents=len(input_data.practicality_agent_ids),
+        ),
     ))
 
     try:
@@ -1301,6 +1323,7 @@ def run_simple_mode(
         solutions = _generate_initial_solutions(
             theory_agents, input_data, llm, vector_store, storage,
             budget, audit_trail, on_event,
+            mode="simple", run_id=run_id,
         )
 
         if not solutions:
@@ -1316,6 +1339,7 @@ def run_simple_mode(
         sim_threshold = input_data.similarity_threshold
         aggregated, monitor_events = cluster_solutions_monitor_v2(
             llm, solutions, budget, similarity_threshold=sim_threshold,
+            mode="simple", run_id=run_id,
         )
         audit_trail.extend(monitor_events)
 
@@ -1327,6 +1351,7 @@ def run_simple_mode(
             recommendations, input_data.practicality_agent_ids,
             input_data, llm, vector_store, storage,
             budget, audit_trail, on_event,
+            mode="simple", run_id=run_id,
         )
 
         # Step 5: Repair (at most 1 iteration in simple mode)
@@ -1337,6 +1362,7 @@ def run_simple_mode(
             recommendations, threshold, max_repair,
             llm, vector_store, storage, input_data,
             budget, audit_trail, repair_stats, on_event,
+            mode="simple", run_id=run_id,
         )
 
         if repair_stats.recommendations_recovered > 0:
@@ -1360,6 +1386,16 @@ def run_simple_mode(
             surviving.append(rec)  # Include but mark as failed
         else:
             rec.status = RecommendationStatus.VETOED.value
+            vetoed.append(rec)
+
+    # I4 guard: approved recommendations must be above threshold.
+    # Resilient — demote rather than crash (bare assert is stripped by python -O).
+    _log = logging.getLogger("hivemind.debate")
+    for rec in surviving[:]:
+        if rec.status == RecommendationStatus.APPROVED.value and rec.average_feasibility <= threshold:
+            _log.error("I4 violation corrected: rec %s (score %.1f) demoted to vetoed", rec.id, rec.average_feasibility)
+            rec.status = RecommendationStatus.VETOED.value
+            surviving.remove(rec)
             vetoed.append(rec)
 
     all_actions: list[Action] = []
@@ -1441,7 +1477,9 @@ def run_full_mode(
 
     # Outer loop for global restart
     while global_restarts <= max_global_restarts:
-        theory_agents, theory_units_created = _resolve_theory_agents(input_data, storage, audit_trail)
+        theory_agents, theory_units_created = _resolve_theory_agents(
+            input_data, storage, audit_trail, mode="full", run_id=run_id,
+        )
 
         if not theory_agents:
             return HivemindOutput(
@@ -1450,9 +1488,9 @@ def run_full_mode(
                 mode_used="full",
                 budget_usage=budget.finalize(),
                 audit_trail=[AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="error",
-                    details={"error": "No theory agents found or created."},
+                    details=_make_audit_details("full", run_id, error="No theory agents found or created."),
                 )],
             )
 
@@ -1460,12 +1498,14 @@ def run_full_mode(
             on_event({"type": "units_created", "count": theory_units_created})
 
         audit_trail.append(AuditEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type="debate_start",
-            details={"event_version": "v2", "mode": "full", "run_id": run_id,
-                     "theory_agents": len(theory_agents),
-                     "practicality_agents": len(input_data.practicality_agent_ids),
-                     "global_restart": global_restarts},
+            details=_make_audit_details(
+                "full", run_id,
+                theory_agents=len(theory_agents),
+                practicality_agents=len(input_data.practicality_agent_ids),
+                global_restart=global_restarts,
+            ),
         ))
 
         try:
@@ -1473,6 +1513,7 @@ def run_full_mode(
             solutions = _generate_initial_solutions(
                 theory_agents, input_data, llm, vector_store, storage,
                 budget, audit_trail, on_event,
+                mode="full", run_id=run_id,
             )
 
             if not solutions:
@@ -1483,6 +1524,7 @@ def run_full_mode(
             sim_threshold = input_data.similarity_threshold
             aggregated, monitor_events = cluster_solutions_monitor_v2(
                 llm, solutions, budget, similarity_threshold=sim_threshold,
+                mode="full", run_id=run_id,
             )
             audit_trail.extend(monitor_events)
             stagnation.record(len(aggregated))
@@ -1497,12 +1539,13 @@ def run_full_mode(
                     on_event({"type": "round_start", "round": debate_rounds, "aggregated_count": len(aggregated)})
 
                 audit_trail.append(AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="debate_round_start",
-                    details={"event_version": "v2", "mode": "full", "run_id": run_id,
-                             "round": debate_rounds,
-                             "solutions_count": len(solutions),
-                             "aggregated_count": len(aggregated)},
+                    details=_make_audit_details(
+                        "full", run_id, round=debate_rounds,
+                        solutions_count=len(solutions),
+                        aggregated_count=len(aggregated),
+                    ),
                 ))
 
                 # Critique phase
@@ -1574,6 +1617,7 @@ def run_full_mode(
                 # Re-aggregate
                 aggregated, monitor_events = cluster_solutions_monitor_v2(
                     llm, solutions, budget, similarity_threshold=sim_threshold,
+                    mode="full", run_id=run_id,
                 )
                 audit_trail.extend(monitor_events)
                 stagnation.record(len(aggregated))
@@ -1582,10 +1626,13 @@ def run_full_mode(
                     on_event({"type": "round_complete", "round": debate_rounds, "aggregated_count": len(aggregated)})
 
                 audit_trail.append(AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="debate_round_complete",
-                    details={"event_version": "v2", "round": debate_rounds,
-                             "aggregated_count": len(aggregated), "target_sufficiency": sufficiency},
+                    details=_make_audit_details(
+                        "full", run_id, round=debate_rounds,
+                        aggregated_count=len(aggregated),
+                        target_sufficiency=sufficiency,
+                    ),
                 ))
 
                 # Check stagnation
@@ -1611,6 +1658,7 @@ def run_full_mode(
                 recommendations, input_data.practicality_agent_ids,
                 input_data, llm, vector_store, storage,
                 budget, audit_trail, on_event,
+                mode="full", run_id=run_id,
             )
 
             # Step 5: Per-recommendation repair
@@ -1623,6 +1671,7 @@ def run_full_mode(
                     recommendations, threshold, max_repair,
                     llm, vector_store, storage, input_data,
                     budget, audit_trail, repair_stats, on_event,
+                    mode="full", run_id=run_id,
                 )
 
                 if repair_stats.recommendations_recovered > 0:
@@ -1633,10 +1682,13 @@ def run_full_mode(
             if not any_passing and global_restarts < max_global_restarts:
                 global_restarts += 1
                 audit_trail.append(AuditEvent(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     event_type="global_restart",
-                    details={"event_version": "v2", "restart_number": global_restarts,
-                             "reason": "no_recommendations_passed_after_repair"},
+                    details=_make_audit_details(
+                        "full", run_id,
+                        restart_number=global_restarts,
+                        reason="no_recommendations_passed_after_repair",
+                    ),
                 ))
                 if on_event:
                     on_event({"type": "veto", "restart_number": global_restarts})
@@ -1660,6 +1712,16 @@ def run_full_mode(
                     else:
                         rec.status = RecommendationStatus.VETOED.value
                         vetoed.append(rec)
+
+            # I4 guard: approved recommendations must be above threshold.
+            # Resilient — demote rather than crash (bare assert is stripped by python -O).
+            _log = logging.getLogger("hivemind.debate")
+            for rec in surviving[:]:
+                if rec.status == RecommendationStatus.APPROVED.value and rec.average_feasibility <= threshold:
+                    _log.error("I4 violation corrected: rec %s (score %.1f) demoted to vetoed", rec.id, rec.average_feasibility)
+                    rec.status = RecommendationStatus.VETOED.value
+                    surviving.remove(rec)
+                    vetoed.append(rec)
 
             all_actions: list[Action] = []
             for rec in surviving:

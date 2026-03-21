@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.models.scraped_source import ScrapedSource
 
 router = APIRouter(prefix="/scraped-sources", tags=["scraped-sources"])
@@ -29,7 +29,7 @@ class ScrapedSourceOut(BaseModel):
 
 
 @router.get("", response_model=list[ScrapedSourceOut])
-def list_sources(db: Session = Depends(get_db)):
+def list_sources(db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     sources = db.query(ScrapedSource).order_by(ScrapedSource.created_at.desc()).all()
     return [
         ScrapedSourceOut(
@@ -45,7 +45,7 @@ def list_sources(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ScrapedSourceOut)
-def create_source(payload: ScrapedSourceCreate, db: Session = Depends(get_db)):
+def create_source(payload: ScrapedSourceCreate, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     source = ScrapedSource(
         url_or_query=payload.url_or_query,
         source_type=payload.source_type,
@@ -65,7 +65,7 @@ def create_source(payload: ScrapedSourceCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/{source_id}/scrape")
-def trigger_scrape(source_id: str, db: Session = Depends(get_db)):
+def trigger_scrape(source_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     """Trigger scrape for a source. Placeholder: in production would enqueue a background job."""
     source = db.query(ScrapedSource).filter(ScrapedSource.id == source_id).first()
     if not source:

@@ -72,7 +72,50 @@
             </tr>
         </thead>
         <tbody>
-            {{ kb_rows | safe }}
+            {% if not kb_data %}
+            <tr><td colspan="6" style="text-align:center;color:#6b7280;padding:40px;">No knowledge bases yet. Upload documents through the Admin app.</td></tr>
+            {% else %}
+            {% for kb in kb_data %}
+            <tr class="kb-row" onclick="toggleDocs('{{ kb.id }}')">
+                <td><strong>&#128218; {{ kb.name }}</strong><br><span class="kb-desc">{{ (kb.description or '')[:100] }}</span></td>
+                <td>{{ kb.document_count }} docs</td>
+                <td>{{ kb.chunk_count }}</td>
+                <td>{{ "{:,}".format(kb.total_tokens) }}</td>
+                <td>{{ kb.created }}</td>
+                <td>{{ kb.embedding_model }}</td>
+            </tr>
+            {% for doc in kb.framework_docs %}
+            <tr class="doc-row" data-kb="{{ kb.id }}">
+                <td style="padding-left:48px;">&#128196; {{ doc.filename }}</td>
+                <td>{{ doc.content_type }}</td>
+                <td>{{ doc.chunk_count }}</td>
+                <td>{{ "S3" if doc.s3_path.startswith("s3://") else "Local" }}</td>
+                <td>{{ doc.uploaded }}</td>
+                <td><span class="preview" title="{{ doc.text_preview }}">{{ doc.text_preview[:80] }}{{ "..." if doc.text_preview|length > 80 else "" }}</span></td>
+            </tr>
+            {% endfor %}
+            {% for doc in kb.simulation_docs %}
+            <tr class="doc-row" data-kb="{{ kb.id }}">
+                <td style="padding-left:48px;">&#9881; {{ doc.filename }}</td>
+                <td>{{ doc.content_type }}</td>
+                <td>{{ doc.chunk_count }}</td>
+                <td>{{ "S3" if doc.s3_path.startswith("s3://") else "Local" }}</td>
+                <td>{{ doc.uploaded }}</td>
+                <td><span class="preview" title="{{ doc.text_preview }}">{{ doc.text_preview[:80] }}{{ "..." if doc.text_preview|length > 80 else "" }}</span></td>
+            </tr>
+            {% endfor %}
+            {% for doc in kb.practicality_docs %}
+            <tr class="doc-row" data-kb="{{ kb.id }}">
+                <td style="padding-left:48px;">&#128736; {{ doc.filename }}</td>
+                <td>{{ doc.content_type }}</td>
+                <td>{{ doc.chunk_count }}</td>
+                <td>{{ "S3" if doc.s3_path.startswith("s3://") else "Local" }}</td>
+                <td>{{ doc.uploaded }}</td>
+                <td><span class="preview" title="{{ doc.text_preview }}">{{ doc.text_preview[:80] }}{{ "..." if doc.text_preview|length > 80 else "" }}</span></td>
+            </tr>
+            {% endfor %}
+            {% endfor %}
+            {% endif %}
         </tbody>
     </table>
 
@@ -89,7 +132,19 @@
             </tr>
         </thead>
         <tbody>
-            {{ sim_rows | safe }}
+            {% if not sim_data %}
+            <tr><td colspan="5" style="text-align:center;color:#6b7280;padding:40px;">No simulation formulas yet.</td></tr>
+            {% else %}
+            {% for sf in sim_data %}
+            <tr>
+                <td><strong>{{ sf.name }}</strong><br><span class="kb-desc">{{ (sf.description or '')[:100] }}</span></td>
+                <td>{{ sf.simulation_type }}</td>
+                <td>{{ sf.inputs[:5]|map(attribute='name')|join(', ') or 'none' }}</td>
+                <td>{{ sf.outputs[:5]|map(attribute='name')|join(', ') or 'none' }}</td>
+                <td>{{ sf.created }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
         </tbody>
     </table>
 
