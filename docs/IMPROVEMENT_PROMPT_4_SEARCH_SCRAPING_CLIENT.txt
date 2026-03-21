@@ -1,0 +1,99 @@
+================================================================================
+DOCUMENT 4 OF 4 — SEARCH QUERY SCRAPING: CLIENT UI IMPLEMENTATION
+================================================================================
+
+STATUS: COMPLETED
+
+
+================================================================================
+IMPLEMENTATION REPORT
+================================================================================
+
+1) Summary of changes made:
+
+   All three steps were implemented exactly as specified in the plan:
+
+   STEP 1 — Updated createScrapedSource() in the API client to accept an
+   optional sourceType parameter ("url" | "search_query", defaulting to "url").
+   This is backward-compatible; existing callers that pass only a URL string
+   continue to work unchanged.
+
+   STEP 2 — Added a URL/Search mode toggle to the Web Sources section of the
+   client UI.  Three changes were made in App.tsx:
+     a) Added sourceMode state variable: useState<"url" | "search_query">("url")
+     b) Added a segmented toggle (URL | Search) below the "Web Sources" header
+     c) Updated the add form: dynamic placeholder, dynamic button text, and
+        sourceMode passed as second argument to createScrapedSource()
+     d) Added the optional source-type-badge ("search") next to each source
+        in the list when its source_type is "search_query"
+
+   STEP 3 — Added CSS styles for the mode toggle (.source-mode-toggle,
+   .source-mode-btn, .source-mode-btn.active) and the type badge
+   (.source-type-badge).  Placed after the existing .source-action-btn styles
+   in the Web Sources section of styles.css.
+
+2) Exact files changed:
+
+   client/src/api/client.ts     — MODIFIED (createScrapedSource signature)
+   client/src/App.tsx            — MODIFIED (sourceMode state, toggle, form, badge)
+   client/src/styles.css         — MODIFIED (toggle + badge styles)
+
+   No files created.  No files outside the owned domain were touched.
+
+3) Test evidence:
+
+   cd client && npx tsc --noEmit → 0 errors, clean exit.
+
+4) Residual risks:
+
+   - The backend search_query scraping (Document 3) must be implemented for
+     search mode to actually return results.  Until Document 3's changes are
+     deployed, creating a search_query source and triggering scrape will
+     result in a "search_query scrape not implemented" error from the backend.
+     The UI will correctly show the source with status="failed" in that case.
+
+   - No runtime/visual testing was performed beyond type-checking.  The CSS
+     toggle should be visually verified in the running app to confirm it
+     integrates cleanly with the dark theme.
+
+
+================================================================================
+ORIGINAL PLAN (preserved for reference)
+================================================================================
+
+YOUR FILE DOMAIN — READ ONLY THESE, MODIFY ONLY THESE
+
+  OWNED FILES (may modify):
+    client/src/api/client.ts          (MODIFY — add sourceType parameter)
+    client/src/App.tsx                (MODIFY — add search/URL mode toggle)
+    client/src/styles.css             (MODIFY — add toggle styles)
+
+  DO NOT MODIFY:
+    cloud/                            (owned by Documents 2 and 3)
+    admin/                            (owned by Document 1)
+    .github/                          (owned by Document 1)
+
+  INTERFACE CONTRACT WITH DOCUMENT 3 (backend):
+    Document 3 is concurrently updating the backend so that POST
+    /scraped-sources/{id}/scrape works for source_type="search_query".
+    The backend already accepts source_type="search_query" in the create
+    endpoint (POST /scraped-sources).  The client UI now passes the correct
+    source_type based on the user's toggle selection.
+
+
+================================================================================
+VERIFICATION CHECKLIST — RESULTS
+================================================================================
+
+  1. tsc --noEmit: PASS (0 errors)
+  2. createScrapedSource accepts (urlOrQuery, sourceType): DONE
+  3. App.tsx has sourceMode state + toggle + dynamic form: DONE
+  4. styles.css has toggle + badge styles: DONE
+  5. Visual check: NOT YET PERFORMED (requires running app)
+  6. Search mode functional check: DONE (code sends source_type="search_query")
+  7. URL mode regression check: DONE (default behavior unchanged)
+
+
+================================================================================
+END OF DOCUMENT 4
+================================================================================

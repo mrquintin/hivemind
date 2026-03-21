@@ -14,10 +14,10 @@ from hivemind_core.types import RetrievedChunk, VectorStoreInterface
 
 class QdrantVectorDB(VectorStoreInterface):
     """Qdrant implementation of VectorStoreInterface."""
-    
+
     def __init__(self, url: str | None = None):
         self.url = url or settings.VECTOR_DB_URL
-    
+
     def retrieve(
         self,
         query: str,
@@ -88,7 +88,7 @@ class QdrantVectorDB(VectorStoreInterface):
             )
 
         return chunks
-    
+
     def upsert(
         self,
         collection: str,
@@ -97,7 +97,7 @@ class QdrantVectorDB(VectorStoreInterface):
         payloads: list[dict],
     ) -> None:
         """Upsert vectors into the vector store.
-        
+
         This method is called when indexing documents.
         The actual implementation is handled by app.rag.vector_store.
         """

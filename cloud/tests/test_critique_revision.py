@@ -1,10 +1,8 @@
 """Tests for the critique/revision pipeline helpers in debate.py."""
 
-import pytest
 
-from hivemind_core.debate import _parse_critique_response, _create_revision_prompt
+from hivemind_core.debate import _create_revision_prompt, _parse_critique_response
 from hivemind_core.types import Critique, TheoryUnitSolution
-
 
 # ---------------------------------------------------------------------------
 # Helpers

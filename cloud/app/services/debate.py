@@ -8,7 +8,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.config import settings
-from hivemind_core import ClaudeLLM, HivemindInput, run_debate as core_run_debate
+from hivemind_core import ClaudeLLM, HivemindInput
+from hivemind_core import run_debate as core_run_debate
 from hivemind_core.adapters import QdrantVectorStore, SQLAlchemyStorage
 
 if TYPE_CHECKING:

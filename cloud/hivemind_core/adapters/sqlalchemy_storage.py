@@ -71,6 +71,7 @@ class SQLAlchemyStorage(StorageInterface):
         if not kb_ids:
             return []
         from sqlalchemy import func
+
         from app.models.knowledge_document import KnowledgeDocument
         from app.models.text_chunk import TextChunk as TextChunkModel
 

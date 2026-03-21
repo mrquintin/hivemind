@@ -10,7 +10,6 @@ Outputs:
 from __future__ import annotations
 
 import json
-import os
 import statistics
 import sys
 from dataclasses import dataclass
@@ -28,9 +27,7 @@ from hivemind_core.types import (
     RecommendationStatus,
     StorageInterface,
     VectorStoreInterface,
-    RetrievedChunk,
 )
-
 
 # ---------------------------------------------------------------------------
 # Lightweight in-memory implementations for benchmarking
@@ -177,8 +174,8 @@ def _generate_report(results: list[RunMetrics]) -> str:
     lines.append("# Hivemind Benchmark Report: Simple vs Full Mode")
     lines.append("")
     lines.append(f"**Prompts:** {len(results) // 2}  ")
-    lines.append(f"**Modes:** simple, full  ")
-    lines.append(f"**LLM backend:** MockLLM (deterministic)  ")
+    lines.append("**Modes:** simple, full  ")
+    lines.append("**LLM backend:** MockLLM (deterministic)  ")
     lines.append("")
 
     # Per-run table

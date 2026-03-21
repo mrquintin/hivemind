@@ -6,6 +6,7 @@ import TheoryFrameworks from "./pages/TheoryFrameworks";
 import Simulations from "./pages/Simulations";
 import PracticalityUnits from "./pages/PracticalityUnits";
 import Settings from "./pages/Settings";
+import ScrapedSources from "./pages/ScrapedSources";
 import Login from "./pages/Login";
 import { ConnectionProvider, useConnection } from "./contexts/ConnectionContext";
 import { getAuthToken, logout, getApiKeyStatus } from "./api/client";
@@ -56,6 +57,7 @@ function AppContent({ onLogout }: { onLogout: () => void }) {
           <Route path="/theory" element={<TheoryFrameworks />} />
           <Route path="/simulations" element={<Simulations />} />
           <Route path="/practicality" element={<PracticalityUnits />} />
+          <Route path="/scraped-sources" element={<ScrapedSources />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

@@ -3,14 +3,11 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from hivemind_core.debate import apply_practicality_scoring, _BudgetGuard
+from hivemind_core.debate import _BudgetGuard, apply_practicality_scoring
 from hivemind_core.types import (
     AgentDefinition,
     AgentExecutionResult,
     AuditEvent,
-    BudgetExhausted,
     HivemindInput,
     LLMInterface,
     NetworkType,
@@ -18,7 +15,6 @@ from hivemind_core.types import (
     StorageInterface,
     VectorStoreInterface,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

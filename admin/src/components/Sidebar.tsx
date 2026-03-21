@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { path: "/theory", label: "Theory Frameworks", icon: "▣" },
   { path: "/simulations", label: "Simulations", icon: "◇" },
   { path: "/practicality", label: "Practicality Units", icon: "◈" },
+  { path: "/scraped-sources", label: "Web Sources", icon: "◎" },
   { path: "/settings", label: "Settings", icon: "⚙" },
 ];
 

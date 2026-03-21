@@ -14,14 +14,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.config import settings
-from app.deps import get_db, _decode_token
+from app.deps import _decode_token
 from hivemind_core import (
     ClaudeLLM,
-    HivemindInput,
     execute_agent,
 )
 from hivemind_core.adapters import QdrantVectorStore, SQLAlchemyStorage

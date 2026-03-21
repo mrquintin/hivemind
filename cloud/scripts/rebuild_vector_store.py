@@ -18,12 +18,12 @@ import sys
 # Ensure app is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from pathlib import Path
 
 # Load config before importing app modules that use it
 from dotenv import load_dotenv
-from pathlib import Path
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 _env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_env)

@@ -1,21 +1,21 @@
 """Tests for debate.py helper / parsing functions."""
 
+import pytest
+
 from hivemind_core.debate import (
+    _aggregated_to_recommendations,
+    _BudgetGuard,
     _create_dynamic_units,
     _parse_critique_response,
-    _parse_solution_reasoning,
     _parse_feasibility_score,
-    _BudgetGuard,
+    _parse_solution_reasoning,
     _StagnationDetector,
-    _aggregated_to_recommendations,
 )
 from hivemind_core.types import (
     AggregatedSolution,
-    DynamicTheoryUnit,
-    HivemindInput,
     BudgetExhausted,
+    HivemindInput,
 )
-import pytest
 
 
 def test_parse_solution_reasoning_with_labels():

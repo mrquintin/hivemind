@@ -12,12 +12,12 @@ import pytest
 jwt = pytest.importorskip("jwt", reason="PyJWT required for auth tests")
 
 from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.config import settings
-from app.deps import get_current_user, get_current_client, get_any_authenticated
-
+from app.deps import get_any_authenticated, get_current_client, get_current_user
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -11,7 +11,6 @@ from typing import Any
 
 from hivemind_core.types import SimulationFormula
 
-
 _ALLOWED_NODE_TYPES = {
     ast.Module,
     ast.Assign,

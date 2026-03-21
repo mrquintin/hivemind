@@ -1,0 +1,107 @@
+================================================================================
+DOCUMENT 1 OF 4 — ADMIN APP: TYPESCRIPT CONFIGURATION, CI, AND SCRAPED SOURCES PAGE
+================================================================================
+
+STATUS: COMPLETED
+
+================================================================================
+SECTION A — ADMIN TYPESCRIPT CONFIGURATION + CI
+================================================================================
+
+SUMMARY OF CHANGES:
+  1. Created admin/tsconfig.json — copied verbatim from client/tsconfig.json
+  2. Created admin/tsconfig.node.json — copied verbatim from client/tsconfig.node.json
+  3. Created admin/src/vite-env.d.ts — Vite client type reference (/// <reference
+     types="vite/client" />) to resolve import.meta.env typing
+  4. Fixed type error in admin/src/pages/Settings.tsx — removed non-existent
+     `includeLocalFallback` property from checkServerHealth() call (property
+     was not in the HealthCheckOptions interface)
+  5. Added typescript-admin job to .github/workflows/ci.yml — mirrors the
+     typescript-client job structure with admin/ paths
+
+DEVIATIONS FROM PLAN:
+  - The plan predicted errors like implicit 'any' on catch clauses, missing type
+    annotations, etc. In practice there were only 2 errors:
+      a) import.meta.env not typed (fixed by adding vite-env.d.ts)
+      b) Settings.tsx passing unknown property to checkServerHealth (fixed by
+         removing the invalid property)
+  - admin/package-lock.json already existed, so no generation was needed.
+
+FILES CREATED:
+  admin/tsconfig.json
+  admin/tsconfig.node.json
+  admin/src/vite-env.d.ts
+
+FILES MODIFIED:
+  admin/src/pages/Settings.tsx (removed `includeLocalFallback: false` from line 100)
+  .github/workflows/ci.yml (added typescript-admin job)
+
+TEST EVIDENCE:
+  cd admin && npx tsc --noEmit -> exit code 0, zero errors
+
+RESIDUAL RISKS:
+  - None identified. The `includeLocalFallback` property was not used by the
+    checkServerHealth function, so removing it has no behavioral impact.
+
+
+================================================================================
+SECTION E — ADMIN SCRAPED SOURCES MANAGEMENT PAGE
+================================================================================
+
+SUMMARY OF CHANGES:
+  1. Added ScrapedSource and ScrapedSourceDetail interfaces + 5 API functions
+     (listScrapedSources, getScrapedSource, createScrapedSource,
+     deleteScrapedSource, triggerScrape) to admin/src/api/client.ts
+  2. Created admin/src/pages/ScrapedSources.tsx — full management page with:
+     - Header with title "Web Sources" and subtitle
+     - Add source form with URL/query input, type selector (url/search_query),
+       and Add Source button; auto-triggers scrape after creation
+     - Sources table with columns: URL/Query, Type, Status (color-coded),
+       Error, Created, Actions
+     - Action buttons: Scrape (pending/failed), View (completed), Delete
+     - Expandable detail view showing scraped_text in a scrollable dark panel
+     - Error handling for all API calls
+  3. Added route in admin/src/App.tsx: /scraped-sources -> ScrapedSources
+  4. Added nav item in admin/src/components/Sidebar.tsx: Web Sources with icon
+     placed between Practicality Units and Settings
+
+DEVIATIONS FROM PLAN:
+  - None. All requirements were implemented as specified.
+
+FILES CREATED:
+  admin/src/pages/ScrapedSources.tsx
+
+FILES MODIFIED:
+  admin/src/api/client.ts (added scraped source interfaces + 5 functions)
+  admin/src/App.tsx (added import + route)
+  admin/src/components/Sidebar.tsx (added Web Sources nav item)
+
+TEST EVIDENCE:
+  cd admin && npx tsc --noEmit -> exit code 0, zero errors
+
+RESIDUAL RISKS:
+  - The ScrapedSources page depends on backend endpoints being available. If the
+    backend scraped sources router is not yet deployed, API calls will fail
+    gracefully (error messages shown inline).
+
+
+================================================================================
+VERIFICATION CHECKLIST — ALL PASSING
+================================================================================
+
+  1. cd admin && npx tsc --noEmit -> 0 errors                            PASS
+  2. admin/tsconfig.json exists and matches client/tsconfig.json          PASS
+  3. .github/workflows/ci.yml has 3 jobs (python-tests,
+     typescript-client, typescript-admin)                                  PASS
+  4. admin/src/pages/ScrapedSources.tsx exists, exports React component   PASS
+  5. Sidebar has 6 nav items (Dashboard, Theory, Simulations,
+     Practicality, Web Sources, Settings)                                  PASS
+  6. admin/src/App.tsx has route for /scraped-sources                     PASS
+  7. admin/src/api/client.ts exports: listScrapedSources,
+     getScrapedSource, createScrapedSource, deleteScrapedSource,
+     triggerScrape                                                         PASS
+
+
+================================================================================
+END OF DOCUMENT 1
+================================================================================

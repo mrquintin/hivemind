@@ -1,7 +1,8 @@
 """Tests for hivemind_core.simulations."""
 
 import pytest
-from hivemind_core.simulations import run_simulation, format_simulations_for_prompt
+
+from hivemind_core.simulations import format_simulations_for_prompt, run_simulation
 from hivemind_core.types import SimulationFormula, SimulationIO
 
 

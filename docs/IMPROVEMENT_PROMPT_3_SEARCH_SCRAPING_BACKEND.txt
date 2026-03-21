@@ -1,0 +1,115 @@
+================================================================================
+DOCUMENT 3 OF 4 — SEARCH QUERY SCRAPING: BACKEND IMPLEMENTATION
+================================================================================
+
+STATUS: COMPLETED
+
+All steps executed as planned.  This document has been revised to reflect
+what was actually done, deviations from the plan, and verification results.
+
+
+================================================================================
+SUMMARY OF CHANGES
+================================================================================
+
+1) Added duckduckgo-search==6.3.7 to cloud/requirements.txt.
+
+2) Added search_and_scrape() function and MAX_SEARCH_RESULTS constant to
+   cloud/app/services/scraper.py.  The function performs a DuckDuckGo search,
+   scrapes the top result pages via the existing scrape_url_cached(), handles
+   failures gracefully, concatenates text with source URL headers, and
+   truncates to MAX_TEXT_CHARS.
+
+3) Updated the trigger_scrape endpoint in cloud/app/routers/scraped_sources.py
+   to handle source_type="search_query" by calling search_and_scrape().
+   Added a defensive else branch for unknown source types.
+
+4) Added 6 new tests in TestSearchAndScrape class in cloud/tests/test_scraper.py:
+   - test_basic_search: verifies concatenation, title, byte_size
+   - test_failed_url_handled_gracefully: verifies "[Failed to fetch]" fallback
+   - test_no_results: verifies "No search results found." message
+   - test_truncation: verifies MAX_TEXT_CHARS truncation
+   - test_max_results_passed: verifies max_results forwarded to DDGS.text()
+   - test_skips_empty_hrefs: verifies empty/missing hrefs are skipped
+
+
+================================================================================
+FILES CHANGED
+================================================================================
+
+  MODIFIED:
+    cloud/requirements.txt                 — added duckduckgo-search==6.3.7
+    cloud/app/services/scraper.py          — added MAX_SEARCH_RESULTS constant
+                                             and search_and_scrape() function
+    cloud/app/routers/scraped_sources.py   — replaced "not implemented" else
+                                             branch with search_query handler
+                                             + defensive else for unknown types
+    cloud/tests/test_scraper.py            — added TestSearchAndScrape class
+                                             (6 tests)
+
+  CREATED:
+    (none)
+
+
+================================================================================
+TEST EVIDENCE
+================================================================================
+
+  python3 -m pytest tests/test_scraper.py -v
+    Result: 22 passed (16 existing + 6 new)
+
+  python3 -m pytest tests/ -q --tb=short
+    Result: 217 passed, 0 failures
+
+  ruff check app/services/scraper.py app/routers/scraped_sources.py tests/test_scraper.py
+    Result: All checks passed
+
+
+================================================================================
+DEVIATIONS FROM PLAN
+================================================================================
+
+1) The document described a r1/r2 bug in test_caches_result (lines 140-141)
+   where r1 was assigned twice instead of assigning r2.  On inspection, the
+   actual code already had r1 and r2 correctly assigned — the bug did not
+   exist in the current codebase, so no fix was needed.
+
+2) No other deviations.  All four steps were implemented exactly as planned.
+
+
+================================================================================
+RESIDUAL RISKS
+================================================================================
+
+1) DuckDuckGo rate limiting: the duckduckgo-search library relies on
+   DuckDuckGo's HTML interface, which may rate-limit or block requests if
+   called too frequently.  There is no per-user rate limit on search_query
+   scrape triggers beyond the general API auth requirement.  A dedicated
+   rate limit for search scraping could be added if abuse becomes an issue.
+
+2) Search result quality: DuckDuckGo results vary and some URLs may be
+   paywalled, JavaScript-rendered (yielding minimal text from static HTML
+   parsing), or slow to respond.  The 15-second per-URL timeout and
+   graceful failure handling mitigate this, but some searches may return
+   sparse or low-quality text.
+
+3) The duckduckgo-search library is a third-party wrapper around DuckDuckGo's
+   HTML search.  If DuckDuckGo changes their HTML structure, the library may
+   break until updated.  Pin to 6.3.7 for stability.
+
+
+================================================================================
+VERIFICATION CHECKLIST (all passed)
+================================================================================
+
+  [x] python3 -m pytest tests/test_scraper.py -v — 22 passed
+  [x] python3 -m pytest tests/ -q --tb=short — 217 passed, 0 failures
+  [x] ruff check on modified files — all clean
+  [x] cloud/requirements.txt contains duckduckgo-search==6.3.7
+  [x] trigger_scrape no longer returns "search_query scrape not implemented"
+  [x] Existing cache test (r1/r2) verified correct — no bug present
+
+
+================================================================================
+END OF DOCUMENT 3
+================================================================================

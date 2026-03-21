@@ -1,20 +1,18 @@
 """Tests for hivemind_core.types dataclasses and enums."""
 
 from hivemind_core.types import (
+    EFFORT_DEFAULTS,
     AgentDefinition,
     AgentStatus,
     AnalysisMode,
     BudgetExhausted,
     BudgetUsage,
-    ContextItem,
     ContextType,
     DynamicTheoryUnit,
-    EFFORT_DEFAULTS,
     EffortLevel,
     HivemindInput,
     HivemindOutput,
     NetworkType,
-    RagConfig,
     Recommendation,
     RecommendationStatus,
     RepairStats,
@@ -22,7 +20,6 @@ from hivemind_core.types import (
     SimulationFormula,
     StorageInterface,
     TerminationReason,
-    TheoryUnitSolution,
     VectorStoreInterface,
 )
 

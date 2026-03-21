@@ -1,10 +1,8 @@
 """Tests for _create_dynamic_units in debate.py."""
 
-import pytest
 
 from hivemind_core.debate import _create_dynamic_units
 from hivemind_core.types import DynamicTheoryUnit
-
 
 # ---- 1. Empty document list -> returns empty list ----
 

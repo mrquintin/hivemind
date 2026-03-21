@@ -1,160 +1,340 @@
-Hivemind Product Description (v2 Direction)
+Hivemind Product Description
 
-Hivemind is a strategic decision system that combines rigorous theory with practical feasibility constraints so users can make high-stakes choices with both intellectual depth and real-world viability.
+Hivemind is a strategic decision system that generates actionable
+recommendations by orchestrating multiple AI agents in a structured debate
+framework. Rather than querying a single LLM for advice, Hivemind deploys
+specialized theory agents grounded in curated knowledge bases, coordinates
+peer critique and revision cycles, aggregates overlapping solutions through
+a multi-stage clustering pipeline, stress-tests each recommendation against
+practicality constraints, and iteratively repairs those that fall short —
+returning transparent outcomes with full audit metadata.
 
-The product has three applications:
-- Admin (Tauri + React): operator console for configuring agents, knowledge bases, simulation assets, and system settings.
-- Cloud (FastAPI + PostgreSQL + Qdrant): central execution layer for retrieval, debate orchestration, practicality scoring, and audit logging.
-- Client (Tauri + React): end-user interface for submitting problems and receiving recommendations with evidence and feasibility outcomes.
+The product ships as three applications:
 
-The architectural goal is to preserve analytical depth while reducing user-side complexity, runtime cost, and algorithmic brittleness.
+  Admin (Tauri + React desktop app): operator console for configuring
+  agents, knowledge bases, simulation formulas, and system settings.
+  Operators build the knowledge system here — uploading theory frameworks,
+  defining practicality agents with scoring criteria, creating mathematical
+  simulations — then publish agents so they become available to clients.
 
----
-Core Product Position
+  Cloud (FastAPI + PostgreSQL + Qdrant): central execution layer. Hosts the
+  REST API, the core debate engine, RAG retrieval, the analysis streaming
+  endpoints, WebSocket handlers, and built-in monitoring UIs (a dashboard
+  and a knowledge browser). PostgreSQL stores structured data (agents,
+  knowledge bases, documents, analysis results, clients). Qdrant stores
+  vector embeddings for semantic search over document chunks.
 
-Traditional strategy education teaches frameworks but not reliable, repeatable application in real decisions. Hivemind operationalizes that process by:
-1) retrieving relevant strategic knowledge,
-2) generating and refining candidate recommendations,
-3) stress-testing recommendations against practicality constraints,
-4) returning transparent outcomes with audit metadata.
+  Client (Tauri + React desktop app): end-user interface for submitting
+  strategic problems and receiving recommendations. The client connects to
+  the cloud server, authenticates via JWT, and provides a real-time
+  visualization of the analysis as it progresses through theory generation,
+  aggregation, practicality scoring, and repair.
 
-The system is intentionally designed to separate:
-- theoretical insight generation,
-- monitor-level synthesis,
-- practicality feasibility gating,
-so each function can be tuned independently.
-
----
-Knowledge and Data Model
-
-Before analysis, the cloud can access:
-- operator-curated strategic knowledge bases,
-- simulation assets,
-- practicality/compliance knowledge,
-- user-provided context text (when explicitly submitted).
-
-Admin-managed uploads are purpose-specific:
-- Theory frameworks: primarily .txt (with optional richer formats if enabled), embedded for RAG retrieval.
-- Simulation programs: .py executable artifacts plus companion descriptive text for retrieval and tool selection.
-- Practicality documents: primarily .txt constraints and scoring guidance, embedded for feasibility evaluation.
-
-Document pipeline:
-extract -> optional optimization -> chunk -> embed -> store metadata in PostgreSQL + vectors in Qdrant.
 
 ---
-Client Experience (v2)
+How the System Works End-to-End
 
-The default client experience is simplified and outcome-oriented.
+1. Knowledge Preparation (Admin)
 
-Default controls (visible):
-- Problem statement
-- Sufficiency target (desired number of distinct conclusions)
-- Feasibility strictness
-- Analysis mode (Simple / Full)
-- Effort level (Low / Medium / High)
-- Optional decision profile selectors
+Before any analysis can run, an operator uses the admin console to build
+the knowledge system:
 
-Advanced controls (hidden by default):
-- legacy algorithm knobs (density/similarity/revision) are treated as experimental and are not required for standard runs.
+  a. Create knowledge bases — named collections of documents organized by
+     topic or decision type (e.g., "Market Entry Frameworks", "M&A Due
+     Diligence").
 
-This design removes hyperparameter burden from users and shifts optimization responsibility to internal orchestration.
+  b. Upload documents — .txt, .pdf, .docx, or .html files containing
+     strategic frameworks, compliance constraints, or scoring guidance.
+     Each document goes through: text extraction -> optional LLM-powered
+     optimization (restructuring for clarity while preserving all facts) ->
+     token-aware chunking (splitting into overlapping segments sized for
+     embedding) -> embedding via sentence-transformers (all-MiniLM-L6-v2)
+     -> storage of chunks in PostgreSQL and vectors in Qdrant.
+
+  c. Create theory agents — each theory agent has a name, a system prompt
+     describing its analytical perspective, one or more linked knowledge
+     bases (which determine what information it retrieves), and optional
+     simulation formula assignments. Theory agents generate candidate
+     recommendations.
+
+  d. Create practicality agents — each practicality agent has a name,
+     scoring criteria, and optionally linked knowledge bases with
+     constraints or compliance requirements. Practicality agents evaluate
+     the feasibility of recommendations and provide scores, risks,
+     challenges, and mitigations.
+
+  e. Create simulation formulas — mathematical models (defined as formulas
+     or Python programs) with typed inputs and outputs. When assigned to a
+     theory agent, simulations are exposed as callable tools during
+     analysis, allowing the agent to run quantitative calculations as part
+     of its reasoning.
+
+  f. Publish agents — agents start in draft status. Publishing makes them
+     available to the client app. Agents can be versioned and republished.
+
+
+2. Submitting a Problem (Client)
+
+A client user launches the desktop app, logs in with a username, and is
+presented with the analysis interface:
+
+  Visible controls:
+    - Problem statement: a free-text area describing the strategic question.
+    - Analysis mode: Simple (fast single-pass) or Full (multi-round debate).
+    - Effort level: Low, Medium, or High — which sets default caps on debate
+      rounds, repair iterations, and LLM calls.
+    - Sufficiency value: target number of distinct conclusions (1-10).
+    - Feasibility threshold: minimum feasibility score to approve a
+      recommendation (0-100).
+
+  Advanced controls (hidden by default):
+    - Theory network density: auto-create dynamic theory units from a token
+      budget rather than selecting specific agents.
+    - Similarity threshold: minimum embedding similarity to consider two
+      solutions as the "same intent" during aggregation.
+    - Revision strength: how aggressively agents revise their solutions in
+      response to critique (0-100%).
+    - Practicality criticality: how strictly practicality agents evaluate
+      (0-100%).
+    - Use-case profile and decision type selectors: filter which published
+      agents participate based on their configured profile tags.
+    - Manual agent selection: checkboxes to pick specific theory and
+      practicality agents.
+
+  Data panel (toggled sidebar):
+    - Inline context: paste supporting data, financial reports, or research
+      that agents should consider alongside their knowledge base retrieval.
+    - Saved data entries: persistent client-side context entries (text or
+      uploaded files — .pdf, .docx, .txt, .html, .csv). File uploads are
+      processed through RAG text extraction and stored with metadata.
+    - Web sources: URLs that the system scrapes, extracts text from (via
+      BeautifulSoup with safety filtering and caching), and includes as
+      context during analysis.
+
+When the user clicks Submit, the client opens a Server-Sent Events stream
+to the cloud server's /analysis/run/stream endpoint. The analysis begins.
+
+
+3. Analysis Execution (Cloud)
+
+The cloud server receives the analysis request, resolves which agents to
+use, builds the context list (from client-provided text, saved data entries,
+and completed scraped web sources), and hands everything to the core debate
+engine.
+
+  Simple Mode (default, fast path):
+
+    a. Theory generation — Each theory agent executes once. For each agent,
+       the engine retrieves relevant chunks from the agent's linked knowledge
+       bases via Qdrant (embedding the problem statement, searching by cosine
+       similarity, filtering by threshold, returning top-k chunks). The agent
+       receives a prompt containing the problem statement, retrieved knowledge,
+       any simulation tools, and client-provided context. The agent generates
+       one candidate recommendation via the Claude API.
+
+    b. Aggregation — The monitor pipeline clusters similar solutions using a
+       three-stage process:
+         Stage 1: Compute pairwise embedding similarity between all solutions.
+         Stage 2: For borderline pairs (similarity between 0.55 and 0.80),
+         call the LLM to adjudicate whether they represent the same or
+         distinct strategic intent.
+         Stage 3: For each cluster, extract canonical forms (objective,
+         mechanism, dependencies, constraints, expected outcomes), check for
+         contradictions, and merge non-contradictory solutions into unified
+         recommendations via LLM synthesis.
+
+    c. Practicality scoring — Each practicality agent scores every aggregated
+       recommendation on a 0-100 scale and returns structured feedback: risks,
+       challenges, mitigations, and reasoning. The average across all
+       practicality agents becomes the recommendation's feasibility score.
+
+    d. Repair (bounded) — Recommendations scoring below the feasibility
+       threshold enter a repair loop. The engine feeds practicality feedback
+       back to the LLM, which revises the recommendation. The revised version
+       is re-scored. This repeats up to max_repair_iterations (default 1 for
+       simple mode). Recommendations that still fail are returned explicitly
+       as "failed_after_repairs" rather than silently dropped.
+
+    e. Finalize — Return approved recommendations, failed-after-repair
+       recommendations, and any vetoed solutions, along with the full audit
+       trail.
+
+  Full Mode (deep analysis with debate):
+
+    Full mode adds multi-round critique and revision before aggregation.
+
+    a. Initial theory generation — Same as simple mode: each theory agent
+       produces one candidate solution using RAG-retrieved knowledge.
+
+    b. Debate loop (repeats until a stop condition is met):
+         - Critique phase: every agent critiques every other agent's solution,
+           using its own framework. Critiques are parsed into strengths,
+           weaknesses, and suggestions.
+         - Revision phase: each agent revises its solution incorporating the
+           critiques it received. The revision_strength parameter controls
+           how aggressively the agent rewrites (0% = nearly unchanged, 100% =
+           aggressive rewrite).
+         - Re-aggregation: the monitor re-clusters the revised solutions.
+
+    c. Stop conditions (checked after each round, in priority order):
+         - Sufficiency reached: the number of aggregated solutions has
+           converged to the sufficiency_value target.
+         - Max rounds reached: debate_rounds >= configured maximum (default
+           4 for medium effort).
+         - Stagnation detected: no meaningful reduction in solution count
+           over a configured window of rounds.
+         - Budget exhausted: LLM calls, total tokens, or wall-clock time
+           exceeded the configured caps. Partial results are preserved.
+
+    d. Practicality scoring — Same as simple mode.
+
+    e. Per-recommendation repair — Same as simple mode, but with more repair
+       iterations allowed (default 2 for medium effort).
+
+    f. Global restart (emergency fallback) — If no recommendations pass
+       feasibility after repair, the engine can restart the entire debate
+       from scratch. This is capped (default 1 restart) and is not the
+       standard mechanism; it exists only as a last resort.
+
+    g. Finalize — Same as simple mode.
+
+
+4. Real-Time Streaming (Client Visualization)
+
+During analysis, the client receives SSE events and renders a four-panel
+visualization:
+
+  Theory Network panel — Shows theory units as they generate solutions.
+  Each agent appears, highlights while active, and checks off when complete.
+
+  Monitor panel — Shows the current debate round, aggregated solution count,
+  and revision status.
+
+  Practicality Network panel — Shows practicality agents as they score
+  recommendations, with live feasibility scores (0-100).
+
+  Repair/Termination panel — Shows repair iteration counts and, if a veto
+  restart occurs, a flash overlay with the run number.
+
+  Explanation bar (fixed at bottom) — Context-sensitive text explaining the
+  current phase in plain language.
+
+Events streamed include: debate_start, solution_generated, round_start,
+round_complete, pass_to_practicality, feasibility_score, repair_start,
+repair_iteration, termination, complete.
+
+
+5. Output (Client)
+
+When the analysis completes, the client displays a modal with:
+
+  Run statistics — mode used, termination reason, debate rounds, veto
+  restarts, theory units created, total tokens consumed, LLM calls made,
+  and wall-clock duration.
+
+  Approved recommendations — Each with its title, content, reasoning,
+  contributing agents, per-agent feasibility scores (with risks, challenges,
+  and mitigations), and repair history showing score progression across
+  iterations.
+
+  Failed-after-repairs — Recommendations that could not meet the
+  feasibility threshold despite repair attempts. Returned transparently so
+  the user can see what was tried and why it fell short.
+
+  Vetoed solutions — Recommendations rejected during the process.
+
+  Audit trail — A collapsible log of every event in the run: agent
+  executions with token counts and latency, clustering decisions, repair
+  iterations, budget checkpoints.
+
+  Download — Exports the full results as a formatted text file.
+
 
 ---
-Execution Modes
+Data Architecture
 
-1) Simple Mode (default baseline)
-- single-pass theory generation,
-- lightweight aggregation,
-- practicality scoring,
-- optional limited repair pass,
-- lower latency and lower cost.
+PostgreSQL stores all structured state: agents (definitions, configs, publish
+status), knowledge bases (metadata, document records, chunk records with
+token counts), analysis results (request payloads, recommendations, audit
+trails), clients (license keys, subscription tiers), client data entries
+(labels, extracted text, file metadata), scraped sources (URLs, status,
+extracted text), and simulation formulas (inputs, calculations, outputs,
+executable code).
 
-2) Full Mode (deep analysis)
-- multi-round critique/revision,
-- stronger monitor clustering pipeline,
-- recommendation-level repair iterations,
-- bounded by explicit runtime/token/call budgets.
+Qdrant stores vector embeddings. Each knowledge base maps to a Qdrant
+collection (named kb_{id}). Each point in the collection holds a chunk's
+embedding vector plus payload metadata (content, document name, document ID,
+knowledge base ID, source page). Retrieval works by embedding the query,
+searching the relevant collections by cosine similarity, filtering by score
+threshold, and returning the top-k chunks.
 
-Simple mode exists as a practical baseline for most requests; Full mode exists for high-importance analyses where deeper deliberation is worth additional cost.
+Document ingestion pipeline: extract text from file (PDF via PyMuPDF, DOCX
+via python-docx, HTML via regex stripping, plain text) -> optionally
+optimize via LLM (restructure for clarity while preserving all facts) ->
+chunk into token-sized segments with overlap -> embed each chunk ->
+upsert embeddings into Qdrant and chunk records into PostgreSQL.
 
----
-Theory, Monitor, and Practicality Roles
+File storage: uploaded files are stored either in S3 (production) or the
+local filesystem (development), organized into subfolders by document type
+(knowledge/frameworks, simulations, practicality, client_uploads).
 
-Theory network:
-- generates candidate strategic recommendations using RAG-grounded context and available simulations.
-
-Monitor:
-- synthesizes semantically overlapping recommendations,
-- tracks distinct conclusion count against sufficiency,
-- emits transparent clustering evidence.
-
-Practicality network:
-- scores each recommendation on feasibility,
-- returns risks/challenges/mitigations,
-- drives repair input for weak recommendations.
 
 ---
-Veto and Repair Policy (v2)
+Authentication and Multi-Tenancy
 
-Legacy behavior (full blind restart) is no longer the default.
+Authentication is JWT-based with two roles: operator (admin users who
+configure agents and knowledge) and client (end users who run analyses).
+Operators log in with a username; clients connect with a license key. Tokens
+expire after a configurable period (default 60 minutes) and can be refreshed.
+The client app proactively refreshes tokens 5 minutes before expiry.
 
-New default behavior:
-- practicality failures are handled recommendation-by-recommendation,
-- each failed recommendation enters a bounded repair loop informed by practicality feedback,
-- repaired recommendations are rescored,
-- unresolved items are returned explicitly as failed_after_repairs rather than silently discarded.
+Rate limiting is enforced per-user on the analysis endpoint: 10 requests per
+60-second window by default.
 
-Global restart is reserved as an exceptional fallback path, not the standard mechanism.
 
 ---
 Convergence, Safety, and Cost Guarantees
 
-Hivemind v2 requires deterministic stop conditions:
-- max debate rounds,
-- max repair iterations,
-- max LLM calls,
-- max total tokens,
-- max wall-clock time,
-- stagnation detection (no meaningful aggregation improvement across a configured window).
+Every analysis run is bounded by explicit stop conditions: max debate rounds,
+max repair iterations per recommendation, max LLM calls, max total tokens,
+max wall-clock time, and stagnation detection. This ensures that every run
+terminates in finite time with a concrete termination reason
+(sufficiency_reached, completed_with_repairs, budget_exhausted,
+stagnation_early_stop, etc.), making runtime behavior financially predictable
+and operationally safe.
 
-Every run must terminate with an explicit termination reason (for example: sufficiency_reached, completed_with_repairs, budget_exhausted, stagnation_early_stop).
+Web scraping includes safety measures: a domain blocklist (localhost, cloud
+metadata endpoints, private IPs), SSRF protection via DNS resolution checks,
+download size limits (5 MB), text truncation (100K characters), request
+timeouts (15 seconds), and in-memory response caching with a 1-hour TTL.
 
-This makes runtime behavior financially predictable and operationally safe.
-
----
-Monitor Similarity (v2)
-
-Similarity is treated as a first-class technical subsystem.
-
-The monitor uses a layered approach:
-1) fast embedding-based candidate grouping,
-2) semantic adjudication for borderline cases,
-3) canonical-form comparison for merge safety,
-4) per-cluster confidence and rationale logging.
-
-This reduces false merges/splits and makes aggregation decisions auditable.
 
 ---
-Output Contract
+Infrastructure and Deployment
 
-Client receives:
-- approved recommendations,
-- vetoed/failed-after-repair recommendations,
-- feasibility detail by practicality agent,
-- retrieved evidence references,
-- full audit trail,
-- run statistics (tokens, duration, rounds, repairs, termination reason).
+The cloud server runs on FastAPI with Uvicorn. It connects to PostgreSQL for
+structured data and Qdrant for vector search. The Anthropic Claude API
+provides the underlying LLM capability. Sentence-transformers
+(all-MiniLM-L6-v2) provides embedding generation locally. The admin and
+client apps are built with React and packaged as native desktop applications
+via Tauri.
 
-This supports both decision-making and governance/review.
+The cloud server also provides built-in web UIs: a dashboard showing uptime
+and connection status, and a knowledge browser that renders all knowledge
+bases, their documents, chunk counts, token totals, and simulation formulas.
+
+CI runs on GitHub Actions with two parallel jobs: Python (ruff lint + pytest)
+and TypeScript (tsc --noEmit for the client app).
+
 
 ---
 Operational Direction
 
-Hivemind is now explicitly designed to balance:
-- recommendation quality,
-- compute cost,
-- termination reliability,
-- user simplicity,
-without requiring end-users to tune complex algorithmic internals.
-
-In short: default simple behavior for consistency and affordability, optional full behavior for depth, and transparent controls around risk, cost, and convergence.
+Hivemind is designed to balance recommendation quality, compute cost,
+termination reliability, and user simplicity. Simple mode serves as the
+practical default for most requests — fast, affordable, and deterministic.
+Full mode exists for high-importance analyses where deeper deliberation and
+multi-round debate justify the additional cost. In both cases, the system
+handles orchestration, convergence, and feasibility gating internally, so
+end users focus on describing their problem and reviewing the output rather
+than tuning algorithmic internals.

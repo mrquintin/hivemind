@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+
 from cryptography.fernet import Fernet
+
 from app.runtime_paths import api_key_file
 
 # Encryption key derived from a fixed salt (the actual security comes from

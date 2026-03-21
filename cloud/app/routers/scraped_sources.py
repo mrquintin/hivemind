@@ -28,6 +28,10 @@ class ScrapedSourceOut(BaseModel):
         from_attributes = True
 
 
+class ScrapedSourceDetailOut(ScrapedSourceOut):
+    scraped_text: str | None = None
+
+
 @router.get("", response_model=list[ScrapedSourceOut])
 def list_sources(db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     sources = db.query(ScrapedSource).order_by(ScrapedSource.created_at.desc()).all()
@@ -42,6 +46,22 @@ def list_sources(db: Session = Depends(get_db), _user: dict = Depends(get_curren
         )
         for s in sources
     ]
+
+
+@router.get("/{source_id}", response_model=ScrapedSourceDetailOut)
+def get_source(source_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
+    source = db.query(ScrapedSource).filter(ScrapedSource.id == source_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Scraped source not found")
+    return ScrapedSourceDetailOut(
+        id=source.id,
+        url_or_query=source.url_or_query,
+        source_type=source.source_type,
+        status=source.status,
+        error_message=source.error_message,
+        created_at=source.created_at.isoformat() if source.created_at else "",
+        scraped_text=source.scraped_text,
+    )
 
 
 @router.post("", response_model=ScrapedSourceOut)
@@ -64,19 +84,43 @@ def create_source(payload: ScrapedSourceCreate, db: Session = Depends(get_db), _
     )
 
 
-@router.post("/{source_id}/scrape")
-def trigger_scrape(source_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
-    """Trigger scrape for a source. Placeholder: in production would enqueue a background job."""
+@router.delete("/{source_id}")
+def delete_source(source_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
     source = db.query(ScrapedSource).filter(ScrapedSource.id == source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail="Scraped source not found")
+    db.delete(source)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/{source_id}/scrape")
+def trigger_scrape(source_id: str, db: Session = Depends(get_db), _user: dict = Depends(get_current_user)):
+    """Trigger scrape for a source using the scraping service."""
+    from app.services.scraper import scrape_url_cached
+
+    source = db.query(ScrapedSource).filter(ScrapedSource.id == source_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Scraped source not found")
+
     if source.source_type == "url":
         try:
-            import urllib.request
-            req = urllib.request.Request(source.url_or_query, headers={"User-Agent": "HivemindScraper/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-            source.scraped_text = raw[:100_000]
+            result = scrape_url_cached(source.url_or_query)
+            source.scraped_text = result.text
+            source.status = "completed"
+            source.error_message = None
+        except ValueError as e:
+            source.status = "failed"
+            source.error_message = f"Blocked: {e}"
+        except Exception as e:
+            source.status = "failed"
+            source.error_message = str(e)[:500]
+    elif source.source_type == "search_query":
+        try:
+            from app.services.scraper import search_and_scrape
+
+            result = search_and_scrape(source.url_or_query)
+            source.scraped_text = result.text
             source.status = "completed"
             source.error_message = None
         except Exception as e:
@@ -84,6 +128,7 @@ def trigger_scrape(source_id: str, db: Session = Depends(get_db), _user: dict = 
             source.error_message = str(e)[:500]
     else:
         source.status = "failed"
-        source.error_message = "search_query scrape not implemented"
+        source.error_message = f"Unknown source_type: {source.source_type}"
+
     db.commit()
     return {"status": source.status, "id": source_id}

@@ -106,8 +106,10 @@ class QdrantVectorStore(VectorStoreInterface):
                 # Collection might not exist
                 continue
 
-        # Post-filter by document_ids if query_filter wasn't applied (import fallback)
-        if document_ids and query_filter is None:
+        # Always post-filter by document_ids when requested.
+        # Even if a server-side MatchAny filter was sent, the post-filter is a
+        # cheap safety net that guarantees correctness (including with mocks).
+        if document_ids:
             doc_set = set(document_ids)
             all_results = [r for r in all_results if r[2].get("document_id") in doc_set]
 

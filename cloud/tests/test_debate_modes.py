@@ -1,18 +1,15 @@
 """Tests for simple vs full mode branching, repair loop, and backward compatibility."""
 
-import pytest
 from unittest.mock import MagicMock
+
 from hivemind_core.debate import (
-    run_debate,
-    run_simple_mode,
-    run_full_mode,
-    repair_failed_recommendations,
-    apply_practicality_scoring,
     _BudgetGuard,
+    apply_practicality_scoring,
+    repair_failed_recommendations,
+    run_debate,
 )
 from hivemind_core.types import (
     AgentDefinition,
-    BudgetExhausted,
     FeasibilityScore,
     HivemindInput,
     HivemindOutput,
@@ -26,7 +23,6 @@ from hivemind_core.types import (
     TheoryUnitSolution,
     VectorStoreInterface,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mock helpers
@@ -507,7 +503,7 @@ class TestInvariantHardening:
 class TestCanonicalForm:
     def test_extract_canonical_form_valid_json(self):
         """Canonical form extraction parses valid LLM JSON output."""
-        from hivemind_core.debate import _extract_canonical_form, _BudgetGuard
+        from hivemind_core.debate import _BudgetGuard, _extract_canonical_form
 
         llm = MagicMock(spec=LLMInterface)
         llm.call.return_value = {
@@ -526,7 +522,7 @@ class TestCanonicalForm:
 
     def test_extract_canonical_form_malformed_fallback(self):
         """Malformed LLM output falls back to raw solution as objective."""
-        from hivemind_core.debate import _extract_canonical_form, _BudgetGuard
+        from hivemind_core.debate import _BudgetGuard, _extract_canonical_form
 
         llm = MagicMock(spec=LLMInterface)
         llm.call.return_value = {"content": "Not valid JSON at all", "input_tokens": 100, "output_tokens": 50}
@@ -542,7 +538,7 @@ class TestCanonicalForm:
 
     def test_contradiction_detection(self):
         """Contradictory objectives are detected."""
-        from hivemind_core.debate import _detect_contradiction, _BudgetGuard
+        from hivemind_core.debate import _BudgetGuard, _detect_contradiction
 
         llm = MagicMock(spec=LLMInterface)
         llm.call.return_value = {"content": '{"contradicts": true, "reason": "opposing goals"}', "input_tokens": 100, "output_tokens": 50}
@@ -557,7 +553,7 @@ class TestCanonicalForm:
 
     def test_no_contradiction_allows_merge(self):
         """Non-contradictory forms allow merge."""
-        from hivemind_core.debate import _detect_contradiction, _BudgetGuard
+        from hivemind_core.debate import _BudgetGuard, _detect_contradiction
 
         llm = MagicMock(spec=LLMInterface)
         llm.call.return_value = {"content": '{"contradicts": false, "reason": "aligned goals"}', "input_tokens": 100, "output_tokens": 50}
@@ -572,7 +568,7 @@ class TestCanonicalForm:
 
     def test_merge_preserves_canonical_in_evidence(self):
         """Merged cluster evidence contains canonical forms."""
-        from hivemind_core.debate import _merge_solution_cluster, _BudgetGuard
+        from hivemind_core.debate import _BudgetGuard, _merge_solution_cluster
 
         call_count = [0]
         def mock_call(**kwargs):

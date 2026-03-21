@@ -1,129 +1,462 @@
-You are a principal-level systems architect + full-stack engineer working inside this repository.
-All remaining work on the Hivemind v2 debate engine has been completed.
-This document serves as the authoritative record of what was built.
+You are a principal-level systems architect + full-stack engineer working inside
+this repository.  You must implement the features described below with
+production-grade precision.
 
-===============================================================================
-0) IMPLEMENTATION — COMPLETE
-===============================================================================
+Assume ambiguous requirements are unacceptable.  Prefer explicit contracts,
+invariants, and deterministic behavior.  Do not stop at planning — implement
+end-to-end with tests.  When you finish each section, produce:
+  1) Summary of changes made
+  2) Exact files changed + created
+  3) Test evidence (all tests passing)
+  4) Any residual risks
 
-123 tests passing, 0 warnings (+ 14 auth tests when PyJWT installed).
-All acceptance criteria (AC1–AC12) met.
+Repository layout (key paths):
+  cloud/                       Python/FastAPI backend
+    app/routers/               REST API routers
+    app/models/                SQLAlchemy ORM models
+    app/schemas/               Pydantic request/response schemas
+    app/rag/                   RAG pipeline (extraction, chunking, embeddings)
+    app/services/              Business logic (storage, rag, scraper, document_optimizer)
+    app/ws/                    WebSocket handlers
+    app/config.py              Server settings (pydantic-settings)
+    app/deps.py                Auth dependencies (get_current_user, etc.)
+    app/main.py                FastAPI app, CORS, startup, dashboard routes
+    hivemind_core/             Core debate engine (types, debate, agents, etc.)
+    tests/                     pytest test suite (184 tests, 2 pre-existing failures)
+    tests/conftest.py          Integration test fixtures (SQLite, JSONB compat, JWT)
+    requirements.txt           Python dependencies
+    ruff.toml                  Ruff linter configuration
+    scripts/                   Benchmark harness
+  client/                      React + Tauri desktop app (client-facing)
+    src/api/client.ts          API client (types, auth, CRUD, streaming, upload, scraping)
+    src/App.tsx                Main React component
+    src/styles.css             All styles
+    package.json               React 18.3, TypeScript 5.6, Vite 5.4
+    tsconfig.json              strict TS, target ES2020, noEmit
+  admin/                       React + Tauri desktop app (admin-facing)
+    src/api/client.ts          Admin API client (auth, CRUD, uploads)
+    src/App.tsx                Auth gate + router
+    src/pages/                 Dashboard, TheoryFrameworks, Simulations, etc.
+    src/components/Sidebar.tsx Sidebar + logout
+    package.json               React 18.3, react-router-dom 6.26
+    (NOTE: admin/ has NO tsconfig.json — see Section A)
+  .github/workflows/ci.yml    CI pipeline (Python lint+test, client TS check)
 
-Backend core (cloud/hivemind_core/):
-  types.py       — AnalysisMode, EffortLevel, TerminationReason,
-                   RecommendationStatus enums; BudgetUsage, RepairStats,
-                   BudgetExhausted; EFFORT_DEFAULTS; new fields on
-                   HivemindInput, HivemindOutput, Recommendation,
-                   AggregatedSolution; StorageInterface with
-                   get_documents_for_knowledge_bases(); VectorStoreInterface
-                   with document_ids filter param.
-  debate.py      — run_simple_mode(), run_full_mode(),
-                   apply_practicality_scoring(),
-                   repair_failed_recommendations(),
-                   cluster_solutions_monitor_v2() (3-stage: embedding → LLM
-                   adjudication → canonical merge).  _BudgetGuard,
-                   _StagnationDetector.  _make_audit_details() called by
-                   every audit event (mode + run_id threaded through).
-                   Resilient I4 guards (logging + demotion, not bare assert).
-                   All datetime calls use timezone-aware datetime.now(timezone.utc).
-                   Streaming uses thread+queue pattern.
-  agents.py      — build_theory_prompt() SOLUTION/REASONING format;
-                   execute_agent() supports document_ids + tool_calls.
-                   Timezone-aware timestamps.
-  engine.py      — Mode/effort pass-through.
-  interfaces.py  — Re-exports from types.py, InMemoryStorage helper.
-  simulations.py — simulations_to_tools() produces Anthropic tool defs.
-  llm.py         — ClaudeLLM passes tools to API, parses tool_use blocks.
-  adapters/qdrant_vector_store.py — retrieve() supports document_ids with
-                   server-side MatchAny filter (qdrant_client) and post-query
-                   fallback.  Scoped RAG for dynamic units works end-to-end.
-
-Backend API (cloud/app/):
-  deps.py        — get_current_user (operator), get_current_client (client),
-                   get_any_authenticated (either role), _decode_token().
-  All routers    — JWT auth enforced:
-    Admin (agents, knowledge_bases, simulations, settings, clients,
-      client_data, scraped_sources): Depends(get_current_user).
-    Shared (analysis, sync): Depends(get_any_authenticated).
-    Public: /health, /health/detailed, /admin/ping, /admin/ping-status,
-      /dashboard, /knowledge-browser, /auth/login, /auth/client-connect.
-  routers/auth.py — /auth/login, /auth/client-connect, /auth/me (returns
-                   username, role, client_id), /auth/refresh (re-issues token
-                   with same sub/role and fresh expiry).
-  routers/analysis.py — Per-user rate limiter (10 req/60s) applied to
-                   /analysis/run and /analysis/run/stream.
-  ws/handlers.py — Both WebSocket endpoints validate JWT from ?token= query
-                   param before accepting.  Invalid/missing → close code 4001.
-  config.py      — CORS_ORIGINS defaults to explicit Tauri/localhost origins
-                   instead of wildcard "*".
-  schemas/analysis.py — Full request/response types.
-  adapters/storage.py — PostgresStorage.get_documents_for_knowledge_bases().
-  adapters/vector_db.py — QdrantVectorDB.retrieve() filters by document_ids.
-  main.py        — knowledge_browser passes structured data to Jinja2.
-  templates/     — dashboard.html, knowledge_browser.html (Jinja2 loops).
-
-Client (client/src/):
-  api/client.ts  — All types, auth headers, getDensityBounds(), streaming.
-                   connectToAnalysisStream() passes JWT as ?token= query param.
-                   getMe(), listClientData(), createClientData(), deleteClientData().
-                   Proactive token refresh (decodes JWT exp, refreshes 5 min
-                   before expiry via /auth/refresh).
-  App.tsx        — Mode/effort selectors, density slider uses server-provided
-                   bounds, repair phase step, output modal.
-                   "My Data" panel: persistent saved entries via server CRUD,
-                   add/delete entries, entries auto-included in analysis context.
-  styles.css     — Full styling including My Data section.
-
-Admin (admin/src/):
-  api/client.ts  — setAuthToken/getAuthToken, login()/logout(), Authorization
-                   headers on all requests including FormData uploads.
-                   Proactive token refresh (same mechanism as client).
-  App.tsx        — Auth gate: checks stored token on mount, validates with
-                   getApiKeyStatus(), renders Login or BrowserRouter.
-  pages/Login.tsx — Username input, dark-theme login card, error handling.
-  components/Sidebar.tsx — Logout button, onLogout callback.
-
-Tests (cloud/tests/):
-  test_types.py              — 20 tests.
-  test_debate_helpers.py     — 19 tests.
-  test_debate_modes.py       — 17 tests (audit convention, I4, I5, I6).
-  test_simulations.py        — 4 tests.
-  test_canonical_forms.py    — 25 tests (extraction, contradiction, merge).
-  test_critique_revision.py  — 7 tests (parse critique, revision prompt).
-  test_dynamic_units.py      — 7 tests (density-based unit creation).
-  test_practicality.py       — 5 tests (scoring, partial, audit convention).
-  test_qdrant_filtering.py   — 7 tests (document_ids filter, threshold, limits).
-  test_auth.py               — 14 tests (JWT deps; requires PyJWT — skips if absent).
-  Total: 123 passing + 14 auth = 137. 0 warnings.
-
-Evaluation (cloud/scripts/):
-  benchmark_modes.py, benchmark_prompts.json, benchmark_report.md.
+RECENTLY COMPLETED (do not re-implement):
+  - Internet Data Scraping Phase B: BeautifulSoup extraction, caching, safety
+    filtering, analysis pipeline integration, client Web Sources UI.
+    Files: cloud/app/services/scraper.py, cloud/tests/test_scraper.py,
+    updated scraped_sources.py, analysis.py, client.ts, App.tsx, styles.css.
+  - File Upload in Client "My Data" Panel: POST /upload endpoint with RAG
+    text extraction, multipart upload in client, file picker UI.
+    Files: updated client_data.py, storage.py, client.ts, App.tsx, styles.css,
+    cloud/tests/test_client_data_upload.py.
+  - CI/CD Pipeline: GitHub Actions with Python (ruff + pytest) and client TS
+    type-check.  Files: .github/workflows/ci.yml, cloud/ruff.toml.
+  - Automated Integration Tests: SQLite-based fixtures, tests for health,
+    auth, agent CRUD, client data CRUD, analysis (mocked engine).
+    Files: cloud/tests/conftest.py, test_integration_*.py (5 files).
 
 
 ===============================================================================
-1) FUTURE WORK — NOT BLOCKING
+A) ADMIN APP TYPESCRIPT CONFIGURATION
 ===============================================================================
 
-These items are out of scope for the current sprint.  They are noted here for
-future planning.
+CURRENT STATE:
+  The admin/ directory has NO tsconfig.json.  The CI pipeline (.github/
+  workflows/ci.yml) was designed to include a typescript-admin job but it
+  was excluded because tsc --noEmit cannot run without tsconfig.json.
 
-A) Client data management Phase B (internet scraping).
-   The scraped_sources backend is a stub (raw urllib fetch).  Full Phase B
-   requires: HTML-to-text extraction (BeautifulSoup), rate limiting, caching,
-   content safety filtering, analysis pipeline integration, client UI.
-   Scope as a separate initiative.
+  admin/package.json has typescript 5.6.3 as a devDependency.  The client/
+  app has a working tsconfig.json that can serve as a template.
 
-B) File upload in client "My Data" panel.
-   Currently supports paste-only text entries.  Adding file upload (PDF, DOCX)
-   would require a multipart upload endpoint and client-side file picker.
+  admin/src/ contains TypeScript/TSX files organized as:
+    src/App.tsx             — Auth gate + react-router-dom routes
+    src/pages/*.tsx         — Dashboard, TheoryFrameworks, Simulations,
+                              PracticalityUnits, Settings, Login
+    src/components/*.tsx    — Sidebar
+    src/api/client.ts       — Admin API client
 
-C) Automated integration tests.
-   Current tests are unit tests using mocks.  Adding FastAPI TestClient-based
-   integration tests for the full request → engine → response path would
-   catch API-level regressions.
+REQUIREMENTS:
 
-D) CI/CD pipeline.
-   No CI pipeline exists.  Adding GitHub Actions with:
-   - pytest (all tests including auth with PyJWT)
-   - TypeScript type-checking (tsc --noEmit) for client + admin
-   - Linting (ruff for Python, eslint for TypeScript)
+R1. Create admin/tsconfig.json matching the client app's strict configuration.
+R2. Create admin/tsconfig.node.json for Vite config if needed.
+R3. Run tsc --noEmit in admin/ and fix any type errors.
+R4. Add the typescript-admin job back to .github/workflows/ci.yml.
+
+IMPLEMENTATION PLAN:
+
+Step 1 — Create admin/tsconfig.json:
+  Copy from client/tsconfig.json, adjust include/references paths as needed.
+  Key settings: strict: true, noEmit: true, jsx: "react-jsx", target: ES2020.
+
+Step 2 — Create admin/tsconfig.node.json:
+  Check if admin/vite.config.ts exists.  If so, create a tsconfig.node.json
+  that covers it, matching client/tsconfig.node.json.
+
+Step 3 — Fix type errors:
+  Run: cd admin && npx tsc --noEmit
+  Fix any errors.  Common issues: missing type annotations, implicit any,
+  untyped imports.
+
+Step 4 — Update CI workflow:
+  File: .github/workflows/ci.yml
+  Add the typescript-admin job:
+    typescript-admin:
+      runs-on: ubuntu-latest
+      defaults:
+        run:
+          working-directory: admin
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-node@v4
+          with:
+            node-version: "20"
+            cache: npm
+            cache-dependency-path: admin/package-lock.json
+        - run: npm ci
+        - run: npx tsc --noEmit
+
+FILES TO CREATE:
+  admin/tsconfig.json
+  admin/tsconfig.node.json (if vite.config.ts exists)
+
+FILES TO MODIFY:
+  .github/workflows/ci.yml (add typescript-admin job)
+  admin/src/**/*.tsx (fix any type errors found)
+
+
+===============================================================================
+B) FIX PRE-EXISTING QDRANT FILTERING TEST FAILURES
+===============================================================================
+
+CURRENT STATE:
+  cloud/tests/test_qdrant_filtering.py has 2 failing tests:
+    1. TestDocumentIdsFilter::test_document_ids_filters_results
+    2. TestDocumentIdsFilter::test_all_filtered_out_returns_empty
+
+  The tests verify that when document_ids is provided to
+  QdrantVectorStore.retrieve(), results with non-matching document_ids in
+  their metadata are filtered out.
+
+  The implementation in cloud/app/rag/vector_store.py has dual paths:
+    - Server-side filtering via qdrant_client MatchAny (when qdrant_client
+      is installed and supports it)
+    - Post-filtering fallback when query_filter is None
+
+  The bug: the post-filter logic uses "if document_ids and query_filter is
+  None:" but the mock-based tests always set a query_filter, so the
+  post-filter path is never exercised.  Meanwhile, the server-side filter
+  doesn't actually apply to the mocked client properly.
+
+REQUIREMENTS:
+
+R1. Diagnose the exact root cause in vector_store.py's retrieve() method.
+R2. Fix the filtering logic so that document_ids filtering works regardless
+    of whether a server-side MatchAny filter was applied.
+R3. Ensure all tests pass (184 currently passing should remain + 2 fixed = 186).
+
+IMPLEMENTATION PLAN:
+
+Step 1 — Read and understand the retrieve() method:
+  File: cloud/app/rag/vector_store.py
+  Focus on the document_ids filtering logic, the MatchAny construction,
+  and the post-filter fallback.
+
+Step 2 — Fix the logic:
+  The most robust approach: always apply post-filtering when document_ids
+  is provided, regardless of whether a server-side filter was constructed.
+  This ensures correctness even when the server-side filter fails silently
+  (e.g., Qdrant version doesn't support the filter format).
+
+Step 3 — Verify:
+  Run: python3 -m pytest tests/test_qdrant_filtering.py -q
+  All tests should pass.
+  Run: python3 -m pytest tests/ -q
+  186+ tests should pass, 0 failures.
+
+FILES TO MODIFY:
+  cloud/app/rag/vector_store.py (fix document_ids filtering logic)
+
+
+===============================================================================
+C) EXPAND INTEGRATION TEST COVERAGE
+===============================================================================
+
+CURRENT STATE:
+  Integration tests exist for: health, auth, agents, client_data (JSON only),
+  analysis (mocked engine).  30 integration tests total.
+
+  MISSING COVERAGE:
+  1. Knowledge bases router — 12+ endpoints, zero integration tests.
+     Endpoints: GET/POST /knowledge-bases, GET/DELETE /{id},
+     POST /{id}/upload-document, POST /{id}/upload-simulation,
+     POST /{id}/upload-practicality, POST /{id}/upload-smart,
+     POST /{id}/upload-text, POST /{id}/test-retrieval,
+     GET /density-bounds.
+  2. Scraped sources router — 5 endpoints, zero integration tests.
+     Endpoints: GET/POST /scraped-sources, GET/DELETE /{id},
+     POST /{id}/scrape.
+  3. Client data file upload — POST /clients/{id}/data/upload untested
+     in integration (only unit-tested with mocks).
+  4. Analysis rate limiting — 429 response never tested in integration.
+  5. Simulations router — 0 integration tests.
+  6. Settings router — 0 integration tests.
+
+REQUIREMENTS:
+
+R1. Add integration tests for scraped sources CRUD + scrape trigger.
+R2. Add integration test for client data file upload endpoint.
+R3. Add integration test for analysis rate limiting (429).
+R4. Add integration tests for knowledge bases (at minimum: create, list,
+    get, delete).  File upload endpoints can be tested with mocked
+    storage/vector store.
+R5. Target: 50+ integration tests total (currently 30).
+
+IMPLEMENTATION PLAN:
+
+Step 1 — Scraped sources integration tests:
+  File: cloud/tests/test_integration_scraped_sources.py (NEW)
+
+  Tests:
+  - POST /scraped-sources → creates source with status "pending"
+  - GET /scraped-sources → lists sources (empty, then populated)
+  - GET /scraped-sources/{id} → returns detail with scraped_text field
+  - DELETE /scraped-sources/{id} → removes source
+  - POST /scraped-sources/{id}/scrape → mock the scraper service, verify
+    status transitions to "completed" or "failed"
+  - Auth enforcement: requests without token → 401/403
+
+Step 2 — Client data upload integration test:
+  File: cloud/tests/test_integration_client_data.py (MODIFY)
+
+  Add test:
+  - POST /clients/{id}/data/upload with multipart file
+    Mock extract_text_from_bytes and store_file at the module boundary.
+    Verify response has label (from filename), content (extracted text),
+    and metadata with source="file_upload".
+
+Step 3 — Rate limit integration test:
+  File: cloud/tests/test_integration_analysis.py (MODIFY)
+
+  Add test:
+  - Send 11 rapid POST /analysis/run requests (mocked engine).
+    The 11th should return 429.
+  - Note: _rate_buckets is module-level state — may need to clear it
+    between tests to avoid cross-test pollution.  Import and clear
+    _rate_buckets in test setup.
+
+Step 4 — Knowledge bases integration tests:
+  File: cloud/tests/test_integration_knowledge_bases.py (NEW)
+
+  Tests:
+  - POST /knowledge-bases → creates KB, returns id
+  - GET /knowledge-bases → lists KBs
+  - GET /knowledge-bases/{id} → returns KB detail
+  - DELETE /knowledge-bases/{id} → removes KB
+  - POST /knowledge-bases/{id}/upload-text → creates document with text
+    (mock the vector store indexing to avoid Qdrant dependency)
+  - Auth enforcement
+
+FILES TO CREATE:
+  cloud/tests/test_integration_scraped_sources.py
+  cloud/tests/test_integration_knowledge_bases.py
+
+FILES TO MODIFY:
+  cloud/tests/test_integration_client_data.py (add upload test)
+  cloud/tests/test_integration_analysis.py (add rate limit test)
+
+
+===============================================================================
+D) SEARCH QUERY SCRAPING IMPLEMENTATION
+===============================================================================
+
+CURRENT STATE:
+  cloud/app/routers/scraped_sources.py accepts source_type="search_query" but
+  immediately fails with "search_query scrape not implemented".
+
+  cloud/app/services/scraper.py only handles URL scraping via scrape_url().
+
+  The client UI (Web Sources section) currently only exposes "Add URL" — there
+  is no UI for search queries.
+
+REQUIREMENTS:
+
+R1. Implement search query scraping using DuckDuckGo (no API key required).
+R2. For a search_query source, the scraper should:
+    a. Perform a DuckDuckGo search for the query text.
+    b. Extract the top N result URLs (configurable, default 5).
+    c. Scrape each URL using the existing scrape_url_cached().
+    d. Concatenate the extracted text, prefixed with source URLs.
+    e. Store the concatenated text as scraped_text.
+R3. Add a search mode toggle in the client Web Sources UI (URL vs Search).
+R4. Rate-limit search queries (max 5 per hour per user) to avoid abuse.
+
+IMPLEMENTATION PLAN:
+
+Step 1 — Add duckduckgo-search dependency:
+  File: cloud/requirements.txt
+  Add: duckduckgo-search==6.3.7
+
+Step 2 — Add search function to scraper service:
+  File: cloud/app/services/scraper.py
+
+  Add:
+  MAX_SEARCH_RESULTS = 5
+
+  def search_and_scrape(query: str, max_results: int = MAX_SEARCH_RESULTS) -> ScrapeResult:
+      from duckduckgo_search import DDGS
+      with DDGS() as ddgs:
+          results = list(ddgs.text(query, max_results=max_results))
+      texts = []
+      total_bytes = 0
+      for r in results:
+          url = r.get("href", "")
+          if not url:
+              continue
+          try:
+              result = scrape_url_cached(url)
+              texts.append(f"--- Source: {url} ---\n{result.text}")
+              total_bytes += result.byte_size
+          except Exception:
+              texts.append(f"--- Source: {url} ---\n[Failed to fetch]")
+      combined = "\n\n".join(texts)
+      truncated = len(combined) > MAX_TEXT_CHARS
+      if truncated:
+          combined = combined[:MAX_TEXT_CHARS]
+      return ScrapeResult(
+          text=combined,
+          title=f"Search: {query}",
+          byte_size=total_bytes,
+          truncated=truncated,
+      )
+
+Step 3 — Update trigger_scrape for search_query:
+  File: cloud/app/routers/scraped_sources.py
+
+  In trigger_scrape(), replace the else branch:
+    elif source.source_type == "search_query":
+        try:
+            from app.services.scraper import search_and_scrape
+            result = search_and_scrape(source.url_or_query)
+            source.scraped_text = result.text
+            source.status = "completed"
+            source.error_message = None
+        except Exception as e:
+            source.status = "failed"
+            source.error_message = str(e)[:500]
+
+Step 4 — Update client UI:
+  File: client/src/api/client.ts
+  Update createScrapedSource to accept source_type parameter:
+    export async function createScrapedSource(
+      urlOrQuery: string,
+      sourceType: "url" | "search_query" = "url",
+    ): Promise<ScrapedSource>
+
+  File: client/src/App.tsx
+  In the Web Sources section:
+  - Add a toggle/select between "URL" and "Search Query" modes.
+  - Change placeholder text based on mode.
+  - Pass the selected source_type to createScrapedSource().
+
+  File: client/src/styles.css
+  Add styles for the mode toggle if needed.
+
+Step 5 — Tests:
+  File: cloud/tests/test_scraper.py (MODIFY)
+  Add tests for search_and_scrape():
+  - Mock DDGS to return canned search results.
+  - Mock scrape_url_cached to return canned text.
+  - Verify concatenation and truncation.
+  - Verify failed URLs are handled gracefully.
+
+FILES TO CREATE:
+  (none — modifying existing files)
+
+FILES TO MODIFY:
+  cloud/requirements.txt (add duckduckgo-search)
+  cloud/app/services/scraper.py (add search_and_scrape)
+  cloud/app/routers/scraped_sources.py (update search_query handler)
+  client/src/api/client.ts (add sourceType param)
+  client/src/App.tsx (add mode toggle)
+  client/src/styles.css (toggle styles)
+  cloud/tests/test_scraper.py (add search tests)
+
+
+===============================================================================
+E) ADMIN SCRAPED SOURCES MANAGEMENT PAGE
+===============================================================================
+
+CURRENT STATE:
+  The admin app has pages for: Dashboard, Theory Frameworks, Simulations,
+  Practicality Units, Settings, Login.
+
+  There is NO admin page for managing scraped sources.  Admins who want to
+  view or manage scraped web sources must use the API directly or the client
+  app's Web Sources panel.
+
+  The admin API client (admin/src/api/client.ts) does NOT include scraped
+  source functions.
+
+REQUIREMENTS:
+
+R1. Add scraped source API functions to admin/src/api/client.ts.
+R2. Create a ScrapedSources admin page showing all sources, their status,
+    error messages, and scraped text preview.
+R3. Add create/delete/re-scrape actions.
+R4. Add the page to the admin sidebar navigation and router.
+
+IMPLEMENTATION PLAN:
+
+Step 1 — Add API functions to admin client:
+  File: admin/src/api/client.ts
+
+  Add interfaces and functions matching the client app's scraped source API:
+    ScrapedSource interface, ScrapedSourceDetail interface (with scraped_text),
+    listScrapedSources(), getScrapedSource(), createScrapedSource(),
+    deleteScrapedSource(), triggerScrape().
+
+Step 2 — Create ScrapedSources page:
+  File: admin/src/pages/ScrapedSources.tsx (NEW)
+
+  Layout:
+  - Header: "Web Sources" with "Add Source" button.
+  - Table: URL/Query | Type | Status | Error | Created | Actions.
+  - Actions column: "Scrape" button (for pending/failed), "Delete" button.
+  - Add Source modal/form: URL input, source_type select.
+  - Click on a row to see scraped_text preview (expandable or modal).
+
+Step 3 — Add to router and sidebar:
+  File: admin/src/App.tsx
+  Add route: <Route path="/scraped-sources" element={<ScrapedSources />} />
+
+  File: admin/src/components/Sidebar.tsx
+  Add navigation link: "Web Sources" pointing to /scraped-sources.
+
+FILES TO CREATE:
+  admin/src/pages/ScrapedSources.tsx
+
+FILES TO MODIFY:
+  admin/src/api/client.ts (add scraped source functions)
+  admin/src/App.tsx (add route)
+  admin/src/components/Sidebar.tsx (add nav link)
+
+
+===============================================================================
+PRIORITY ORDER
+===============================================================================
+
+  PRIORITY   SECTION   WHAT                                EFFORT
+  ────────   ───────   ────                                ──────
+  1          A         Admin tsconfig.json + CI             Small
+  2          B         Fix qdrant filtering tests           Small
+  3          C         Expand integration test coverage     Medium
+  4          D         Search query scraping                Medium
+  5          E         Admin scraped sources page           Medium
+
+Rationale: A is the smallest and unblocks admin CI.  B fixes 2 pre-existing
+test failures which obscure whether new changes break things.  C strengthens
+the safety net for all future work.  D completes a stubbed feature.  E is
+an admin-facing improvement that can follow D since it depends on the
+scraping features being complete.

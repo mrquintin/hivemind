@@ -575,6 +575,67 @@ export async function deleteClientData(clientId: string, dataId: string): Promis
   await request(`/clients/${clientId}/data/${dataId}`, { method: "DELETE" });
 }
 
+export async function uploadClientData(
+  clientId: string,
+  file: File,
+  label?: string,
+): Promise<ClientDataEntry> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (label) formData.append("label", label);
+
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${API_URL}/clients/${clientId}/data/upload`,
+    { method: "POST", body: formData, headers, mode: "cors", credentials: "omit" }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Upload failed: ${text}`);
+  }
+  return res.json();
+}
+
+// -----------------------------------------------------------------------------
+// Scraped Sources (Web Sources)
+// -----------------------------------------------------------------------------
+
+export interface ScrapedSource {
+  id: string;
+  url_or_query: string;
+  source_type: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export async function listScrapedSources(): Promise<ScrapedSource[]> {
+  return request<ScrapedSource[]>("/scraped-sources");
+}
+
+export async function createScrapedSource(
+  urlOrQuery: string,
+  sourceType: "url" | "search_query" = "url",
+): Promise<ScrapedSource> {
+  return request<ScrapedSource>("/scraped-sources", {
+    method: "POST",
+    body: JSON.stringify({ url_or_query: urlOrQuery, source_type: sourceType }),
+  });
+}
+
+export async function triggerScrape(id: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/scraped-sources/${id}/scrape`, {
+    method: "POST",
+  });
+}
+
+export async function deleteScrapedSource(id: string): Promise<void> {
+  await request(`/scraped-sources/${id}`, { method: "DELETE" });
+}
+
 // -----------------------------------------------------------------------------
 // Health Check
 // -----------------------------------------------------------------------------

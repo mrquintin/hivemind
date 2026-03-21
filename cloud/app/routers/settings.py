@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import json
-import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.deps import get_current_user
-from app.secrets import encrypt_api_key, decrypt_api_key, read_api_key_file, write_api_key_file
 from app.runtime_paths import settings_file
+from app.secrets import (
+    decrypt_api_key,
+    encrypt_api_key,
+    read_api_key_file,
+    write_api_key_file,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 

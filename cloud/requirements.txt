@@ -18,4 +18,7 @@ websockets==12.0
 paho-mqtt==2.1.0
 cryptography==42.0.0
 jinja2==3.1.4
+beautifulsoup4==4.12.3
+duckduckgo-search==6.3.7
 pytest==8.3.3
+ruff==0.8.4

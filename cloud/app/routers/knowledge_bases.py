@@ -15,7 +15,12 @@ from app.rag.embeddings import embed_texts
 from app.rag.extraction import extract_text_from_bytes
 from app.rag.vector_store import upsert_embeddings
 from app.routers.settings import get_active_api_key
-from app.schemas.knowledge_base import KnowledgeBaseCreate, KnowledgeBaseOut, TestRetrievalRequest, UploadTextRequest
+from app.schemas.knowledge_base import (
+    KnowledgeBaseCreate,
+    KnowledgeBaseOut,
+    TestRetrievalRequest,
+    UploadTextRequest,
+)
 from app.services.document_optimizer import classify_document, optimize_document
 from app.services.rag import retrieve_chunks
 from app.services.storage import store_file

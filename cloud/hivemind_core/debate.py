@@ -9,9 +9,9 @@ Both streaming and non-streaming paths call the same core subroutines to prevent
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
-import logging
 from datetime import datetime, timezone
 from typing import Any, Generator
 
@@ -26,7 +26,6 @@ from hivemind_core.types import (
     BudgetUsage,
     Critique,
     DynamicTheoryUnit,
-    EFFORT_DEFAULTS,
     FeasibilityScore,
     HivemindInput,
     HivemindOutput,
@@ -41,7 +40,6 @@ from hivemind_core.types import (
     TheoryUnitSolution,
     VectorStoreInterface,
 )
-
 
 # ---------------------------------------------------------------------------
 # Audit Event Helper

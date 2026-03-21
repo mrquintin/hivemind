@@ -58,6 +58,7 @@ def store_file(
         "simulation_program": "simulations",
         "simulation_description": "simulations",
         "practicality": "practicality",
+        "client_upload": "client_uploads",
     }.get(document_type, "knowledge/frameworks")
 
     safe_name = _safe_filename(filename)

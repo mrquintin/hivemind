@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db
@@ -56,3 +56,43 @@ def delete_client_data(client_id: str, data_id: str, db: Session = Depends(get_d
     db.delete(entry)
     db.commit()
     return {"status": "deleted"}
+
+
+@router.post("/upload", response_model=ClientDataOut)
+def upload_client_data(
+    client_id: str,
+    file: UploadFile = File(...),
+    label: str = Form(""),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """Upload a file, extract text, and store as a client data entry."""
+    from app.rag.extraction import extract_text_from_bytes
+    from app.services.storage import store_file
+
+    data = file.file.read()
+    content_type = file.content_type or "application/octet-stream"
+    filename = file.filename or "upload"
+
+    extracted_text = extract_text_from_bytes(content_type, data)
+
+    file_path, _ = store_file(filename, data, document_type="client_upload")
+
+    effective_label = label.strip() or filename
+
+    entry = ClientData(
+        client_id=client_id,
+        label=effective_label,
+        content=extracted_text,
+        metadata_={
+            "filename": filename,
+            "content_type": content_type,
+            "file_path": file_path,
+            "byte_size": len(data),
+            "source": "file_upload",
+        },
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry

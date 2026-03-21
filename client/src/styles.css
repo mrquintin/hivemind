@@ -1574,3 +1574,146 @@ body {
   font-size: 12px;
   padding: 6px 16px;
 }
+
+.data-upload-divider {
+  text-align: center;
+  color: #6b7280;
+  font-size: 11px;
+  margin: 12px 0;
+}
+
+.data-upload-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.data-upload-input {
+  flex: 1;
+  font-size: 12px;
+  color: #e8ecf2;
+}
+
+.data-upload-input::file-selector-button {
+  background: #161a24;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e8ecf2;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.data-upload-input::file-selector-button:hover {
+  border-color: #4ade80;
+}
+
+.data-upload-btn {
+  font-size: 12px;
+  padding: 6px 16px;
+}
+
+/* ========== Web Sources ========== */
+
+.web-sources-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #222;
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.source-url {
+  font-size: 12px;
+  color: #7fd7ff;
+  word-break: break-all;
+}
+
+.source-status-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.source-status-badge.status-pending {
+  background: #1a1a00;
+  color: #f59e0b;
+}
+
+.source-status-badge.status-completed {
+  background: #001a00;
+  color: #22c55e;
+}
+
+.source-status-badge.status-failed {
+  background: #1a0000;
+  color: #ef4444;
+}
+
+.source-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.source-action-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+/* Source mode toggle (URL / Search) */
+.source-mode-toggle {
+  display: flex;
+  gap: 0;
+  margin: 8px 0;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.source-mode-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: transparent;
+  color: #888;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.source-mode-btn:hover {
+  color: #ccc;
+  background: #1a1a1a;
+}
+
+.source-mode-btn.active {
+  background: #1a1a1a;
+  color: #7fd7ff;
+  font-weight: 600;
+}
+
+.source-type-badge {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  border-radius: 3px;
+  background: #1a2a3a;
+  color: #7fd7ff;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}

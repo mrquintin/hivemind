@@ -21,7 +21,13 @@ import {
   listClientData,
   createClientData,
   deleteClientData,
+  uploadClientData,
   type ClientDataEntry,
+  listScrapedSources,
+  createScrapedSource,
+  triggerScrape,
+  deleteScrapedSource,
+  type ScrapedSource,
 } from "./api/client";
 
 // ---------------------------------------------------------------------------
@@ -340,6 +346,11 @@ export default function App() {
   const [newEntryLabel, setNewEntryLabel] = useState("");
   const [newEntryContent, setNewEntryContent] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [scrapedSources, setScrapedSources] = useState<ScrapedSource[]>([]);
+  const [newSourceUrl, setNewSourceUrl] = useState("");
+  const [sourceMode, setSourceMode] = useState<"url" | "search_query">("url");
 
   // --- Analysis state ---
   const [analysisStep, setAnalysisStep] = useState<AnalysisStep>("initializing");
@@ -420,8 +431,12 @@ export default function App() {
     try {
       const me = await getMe();
       setClientId(me.client_id);
-      const entries = await listClientData(me.client_id);
+      const [entries, sources] = await Promise.all([
+        listClientData(me.client_id),
+        listScrapedSources().catch(() => [] as ScrapedSource[]),
+      ]);
       setClientDataEntries(entries);
+      setScrapedSources(sources);
     } catch {
       // Non-critical — client data panel just stays empty
     }
@@ -1154,7 +1169,10 @@ export default function App() {
                       {clientDataEntries.map((entry) => (
                         <div key={entry.id} className="data-entry-row">
                           <div className="data-entry-info">
-                            <span className="data-entry-label">{entry.label}</span>
+                            <span className="data-entry-label">
+                              {entry.metadata?.source === "file_upload" ? "[file] " : ""}
+                              {entry.label}
+                            </span>
                             <span className="data-entry-preview">
                               {entry.content.slice(0, 100)}{entry.content.length > 100 ? "..." : ""}
                             </span>
@@ -1208,6 +1226,143 @@ export default function App() {
                       }}
                     >
                       {savingEntry ? "Saving..." : "Save entry"}
+                    </button>
+
+                    <div className="data-upload-divider">— or upload a file —</div>
+                    <div className="data-upload-row">
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.doc,.txt,.html,.csv"
+                        className="data-upload-input"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      />
+                      <button
+                        className="btn btn-secondary data-upload-btn"
+                        disabled={!uploadFile || !clientId || uploading}
+                        onClick={async () => {
+                          if (!uploadFile || !clientId) return;
+                          setUploading(true);
+                          try {
+                            const created = await uploadClientData(clientId, uploadFile);
+                            setClientDataEntries((prev) => [...prev, created]);
+                            setUploadFile(null);
+                            const input = document.querySelector('.data-upload-input') as HTMLInputElement;
+                            if (input) input.value = '';
+                          } catch { /* ignore */ }
+                          setUploading(false);
+                        }}
+                      >
+                        {uploading ? "Uploading..." : "Upload"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Web Sources — scraped URLs and search queries */}
+                <div className="web-sources-section">
+                  <div className="my-data-header">
+                    <span className="my-data-title">Web Sources</span>
+                    <span className="my-data-count">{scrapedSources.length} sources</span>
+                  </div>
+                  <div className="source-mode-toggle">
+                    <button
+                      className={`source-mode-btn ${sourceMode === "url" ? "active" : ""}`}
+                      onClick={() => setSourceMode("url")}
+                    >
+                      URL
+                    </button>
+                    <button
+                      className={`source-mode-btn ${sourceMode === "search_query" ? "active" : ""}`}
+                      onClick={() => setSourceMode("search_query")}
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {scrapedSources.length > 0 && (
+                    <div className="my-data-list">
+                      {scrapedSources.map((src) => (
+                        <div key={src.id} className="source-row">
+                          <div className="data-entry-info">
+                            <span className="source-url" title={src.url_or_query}>
+                              {src.url_or_query.length > 40
+                                ? src.url_or_query.slice(0, 40) + "..."
+                                : src.url_or_query}
+                            </span>
+                            {src.source_type === "search_query" && (
+                              <span className="source-type-badge">search</span>
+                            )}
+                            <span className={`source-status-badge status-${src.status}`}>
+                              {src.status}
+                            </span>
+                          </div>
+                          <div className="source-actions">
+                            {src.status !== "completed" && (
+                              <button
+                                className="btn btn-secondary source-action-btn"
+                                onClick={async () => {
+                                  try {
+                                    const result = await triggerScrape(src.id);
+                                    setScrapedSources((prev) =>
+                                      prev.map((s) =>
+                                        s.id === src.id ? { ...s, status: result.status } : s
+                                      )
+                                    );
+                                  } catch { /* ignore */ }
+                                }}
+                              >
+                                Scrape
+                              </button>
+                            )}
+                            <button
+                              className="data-entry-delete"
+                              onClick={async () => {
+                                try {
+                                  await deleteScrapedSource(src.id);
+                                  setScrapedSources((prev) => prev.filter((s) => s.id !== src.id));
+                                } catch { /* ignore */ }
+                              }}
+                              aria-label="Delete"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="data-add-form">
+                    <input
+                      type="text"
+                      className="data-add-label"
+                      placeholder={sourceMode === "url" ? "https://example.com/article" : "Search query..."}
+                      value={newSourceUrl}
+                      onChange={(e) => setNewSourceUrl(e.target.value)}
+                    />
+                    <button
+                      className="btn btn-secondary data-add-save"
+                      disabled={!newSourceUrl.trim()}
+                      onClick={async () => {
+                        const url = newSourceUrl.trim();
+                        if (!url) return;
+                        try {
+                          const created = await createScrapedSource(url, sourceMode);
+                          setScrapedSources((prev) => [created, ...prev]);
+                          setNewSourceUrl("");
+                          // Auto-trigger scrape
+                          try {
+                            const result = await triggerScrape(created.id);
+                            setScrapedSources((prev) =>
+                              prev.map((s) =>
+                                s.id === created.id ? { ...s, status: result.status } : s
+                              )
+                            );
+                          } catch { /* ignore */ }
+                        } catch { /* ignore */ }
+                      }}
+                    >
+                      {sourceMode === "url" ? "Add URL" : "Search"}
                     </button>
                   </div>
                 </div>

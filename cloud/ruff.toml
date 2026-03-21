@@ -1,0 +1,11 @@
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[lint.isort]
+known-first-party = ["app", "hivemind_core"]
+
+[lint.per-file-ignores]
+"app/main.py" = ["E402"]
+"scripts/*" = ["E402"]
+"tests/test_auth.py" = ["E402"]

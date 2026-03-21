@@ -1,0 +1,154 @@
+================================================================================
+DOCUMENT 2 OF 4 — CLOUD TESTING: QDRANT FIX + INTEGRATION TEST EXPANSION
+================================================================================
+
+STATUS: COMPLETED — All sections implemented and verified.
+
+
+================================================================================
+SECTION B — FIX PRE-EXISTING QDRANT FILTERING TEST FAILURES
+================================================================================
+
+SUMMARY:
+  Fixed the document_ids post-filter bug in QdrantVectorStore.retrieve().
+  The condition `if document_ids and query_filter is None` was changed to
+  `if document_ids` so the post-filter always runs when document_ids is
+  provided, regardless of whether a server-side Qdrant filter was constructed.
+
+FILES CHANGED:
+  cloud/hivemind_core/adapters/qdrant_vector_store.py (line 109-112)
+    - Removed `and query_filter is None` condition
+    - Updated comment to explain the "always post-filter" approach
+
+TEST EVIDENCE:
+  cd cloud && python3 -m pytest tests/test_qdrant_filtering.py -v
+  Result: 7/7 passed (including the 2 previously failing tests)
+
+DEVIATIONS FROM PLAN: None. Single-line fix as specified.
+
+RESIDUAL RISKS: None. Double-filtering is idempotent — the server-side filter
+  narrows results, and the post-filter confirms. No performance concern since
+  the result set is already small (top_k * 5 max).
+
+
+================================================================================
+SECTION C — EXPAND INTEGRATION TEST COVERAGE
+================================================================================
+
+C.1 — Scraped Sources Integration Tests
+----------------------------------------
+
+SUMMARY:
+  Created 12 integration tests covering all 5 scraped sources endpoints:
+  create (url + search_query), list (empty + populated), get detail,
+  get nonexistent, delete, delete nonexistent, trigger scrape (success + failure),
+  trigger scrape nonexistent, and auth enforcement.
+
+FILES CREATED:
+  cloud/tests/test_integration_scraped_sources.py (12 tests)
+
+TEST EVIDENCE:
+  cd cloud && python3 -m pytest tests/test_integration_scraped_sources.py -v
+  Result: 12/12 passed
+
+DEVIATIONS FROM PLAN:
+  - The scraper mock patches `app.services.scraper.scrape_url_cached` (the
+    source module) rather than `app.routers.scraped_sources.scrape_url_cached`
+    because the router uses a lazy import inside the function body. Both
+    approaches work; the source-module patch is more robust for lazy imports.
+
+C.2 — Knowledge Bases Integration Tests
+----------------------------------------
+
+SUMMARY:
+  Created 11 integration tests covering KB CRUD (create, list empty, list
+  populated, get, get nonexistent, delete, delete nonexistent) plus upload-text
+  (success with mocked RAG pipeline, nonexistent KB, too-short content) and
+  auth enforcement.
+
+FILES CREATED:
+  cloud/tests/test_integration_knowledge_bases.py (11 tests)
+
+TEST EVIDENCE:
+  cd cloud && python3 -m pytest tests/test_integration_knowledge_bases.py -v
+  Result: 11/11 passed
+
+DEVIATIONS FROM PLAN:
+  - The upload-text test mocks 6 dependencies (store_file, get_active_api_key,
+    optimize_document, chunk_text, embed_texts, upsert_embeddings) rather than
+    the 4 mentioned in the plan, because the _process_and_embed helper calls
+    chunk_text internally which also needed mocking for the test to pass
+    without real RAG infrastructure.
+
+C.3 — Client Data Upload Integration Test
+------------------------------------------
+
+SUMMARY:
+  Added 1 file upload integration test to the existing client data test file.
+  The test mocks extract_text_from_bytes and store_file (lazy-imported in the
+  upload endpoint), sends a multipart file upload, and verifies the response.
+
+FILES MODIFIED:
+  cloud/tests/test_integration_client_data.py
+    - Added `from unittest.mock import patch` import
+    - Added test_upload_file method to TestClientDataCRUD class
+
+TEST EVIDENCE:
+  cd cloud && python3 -m pytest tests/test_integration_client_data.py -v
+  Result: 8/8 passed (7 existing + 1 new)
+
+DEVIATIONS FROM PLAN:
+  - Patched at source modules (app.rag.extraction.extract_text_from_bytes,
+    app.services.storage.store_file) instead of app.routers.client_data.*
+    because the upload endpoint uses lazy imports inside the function body.
+    Patching at source is necessary for lazy imports to intercept correctly.
+
+C.4 — Analysis Rate Limiting Integration Test
+----------------------------------------------
+
+SUMMARY:
+  Added 1 rate limit test in a new TestAnalysisRateLimit class. The test sends
+  10 successful analysis requests then verifies the 11th returns HTTP 429.
+  setup_method clears _rate_buckets to prevent cross-test pollution.
+
+FILES MODIFIED:
+  cloud/tests/test_integration_analysis.py
+    - Added TestAnalysisRateLimit class with setup_method and
+      test_rate_limit_returns_429
+
+TEST EVIDENCE:
+  cd cloud && python3 -m pytest tests/test_integration_analysis.py -v
+  Result: 4/4 passed (3 existing + 1 new)
+
+DEVIATIONS FROM PLAN: None.
+
+
+================================================================================
+FULL VERIFICATION
+================================================================================
+
+  cd cloud && python3 -m pytest tests/ -q --tb=short
+  Result: 217 passed, 0 failures
+
+  cd cloud && python3 -m ruff check (all changed/created files)
+  Result: All checks passed
+
+INTEGRATION TEST COUNT:
+  Before: 30 integration tests across 5 files
+  After:  54 integration tests across 7 files (+24 new tests)
+    test_integration_health.py             2 tests
+    test_integration_auth.py               9 tests
+    test_integration_agents.py             7 tests
+    test_integration_client_data.py        8 tests  (+1)
+    test_integration_analysis.py           4 tests  (+1)
+    test_integration_scraped_sources.py   12 tests  (NEW)
+    test_integration_knowledge_bases.py   11 tests  (NEW)
+
+RESIDUAL RISKS:
+  - None identified. All tests pass, no lint errors, no files outside domain
+    were modified.
+
+
+================================================================================
+END OF DOCUMENT 2
+================================================================================

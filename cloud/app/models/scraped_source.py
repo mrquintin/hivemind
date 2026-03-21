@@ -1,6 +1,6 @@
 """Model for scraped/external data sources (spec: data scraped from the internet)."""
-from datetime import datetime
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Column, DateTime, String, Text
 

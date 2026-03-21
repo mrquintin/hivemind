@@ -18,6 +18,7 @@ from app.engine import create_engine
 from app.models.agent import AgentDefinition
 from app.models.analysis import AnalysisResult
 from app.models.knowledge_base import KnowledgeBase
+from app.models.scraped_source import ScrapedSource
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResultOut,
@@ -220,6 +221,19 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db), _clien
         if (text and isinstance(text, str) and text.strip())
     ]
 
+    # Include completed scraped web sources as context
+    scraped = db.query(ScrapedSource).filter(
+        ScrapedSource.status == "completed",
+        ScrapedSource.scraped_text.isnot(None),
+    ).all()
+    for s in scraped:
+        if s.scraped_text and s.scraped_text.strip():
+            context.append(ContextItem(
+                type=ContextType.TEXT,
+                content=f"[Web source: {s.url_or_query}]\n{s.scraped_text}",
+                source="web_scrape",
+            ))
+
     engine = create_engine(db)
     start = time.time()
 
@@ -282,6 +296,19 @@ async def run_analysis_streaming(payload: AnalysisRequest, db: Session = Depends
         for text in (payload.context_document_texts or [])
         if (text and isinstance(text, str) and text.strip())
     ]
+
+    # Include completed scraped web sources as context
+    scraped = db.query(ScrapedSource).filter(
+        ScrapedSource.status == "completed",
+        ScrapedSource.scraped_text.isnot(None),
+    ).all()
+    for s in scraped:
+        if s.scraped_text and s.scraped_text.strip():
+            context.append(ContextItem(
+                type=ContextType.TEXT,
+                content=f"[Web source: {s.url_or_query}]\n{s.scraped_text}",
+                source="web_scrape",
+            ))
 
     engine = create_engine(db)
     hivemind_input = _build_hivemind_input(payload, theory_ids, practicality_ids, context)

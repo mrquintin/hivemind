@@ -49,7 +49,7 @@ def login(payload: LoginRequest) -> TokenResponse:
     api_key = get_active_api_key()
     if api_key:
         settings.ANTHROPIC_API_KEY = api_key
-    
+
     token = _create_token(username, {"role": "operator"})
     return TokenResponse(access_token=token)
 

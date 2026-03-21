@@ -97,7 +97,6 @@ export default function Settings() {
 
     const result = await checkServerHealth({
       candidateUrl: url,
-      includeLocalFallback: false,
       persistSuccess: true,
     });
 

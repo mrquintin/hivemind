@@ -733,3 +733,48 @@ export function isCustomServerUrl(): boolean {
 export function getDefaultApiUrl(): string {
   return getConfiguredApiUrl();
 }
+
+// -----------------------------------------------------------------------------
+// Scraped Sources
+// -----------------------------------------------------------------------------
+
+export interface ScrapedSource {
+  id: string;
+  url_or_query: string;
+  source_type: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface ScrapedSourceDetail extends ScrapedSource {
+  scraped_text: string | null;
+}
+
+export async function listScrapedSources(): Promise<ScrapedSource[]> {
+  return request<ScrapedSource[]>("/scraped-sources");
+}
+
+export async function getScrapedSource(id: string): Promise<ScrapedSourceDetail> {
+  return request<ScrapedSourceDetail>(`/scraped-sources/${id}`);
+}
+
+export async function createScrapedSource(
+  urlOrQuery: string,
+  sourceType: "url" | "search_query" = "url",
+): Promise<ScrapedSource> {
+  return request<ScrapedSource>("/scraped-sources", {
+    method: "POST",
+    body: JSON.stringify({ url_or_query: urlOrQuery, source_type: sourceType }),
+  });
+}
+
+export async function deleteScrapedSource(id: string): Promise<void> {
+  await request(`/scraped-sources/${id}`, { method: "DELETE" });
+}
+
+export async function triggerScrape(id: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/scraped-sources/${id}/scrape`, {
+    method: "POST",
+  });
+}

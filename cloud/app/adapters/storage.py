@@ -97,41 +97,41 @@ def _chunk_to_dataclass(chunk: TextChunkModel, document_name: str = "") -> TextC
 
 class PostgresStorage(StorageInterface):
     """PostgreSQL implementation of StorageInterface."""
-    
+
     def __init__(self, db: Session):
         self.db = db
-    
+
     def get_agent(self, agent_id: str) -> AgentConfig | None:
         agent = self.db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
         if not agent:
             return None
         return _agent_to_config(agent)
-    
+
     def get_agents(self, agent_ids: list[str]) -> list[AgentConfig]:
         agents = self.db.query(AgentDefinition).filter(AgentDefinition.id.in_(agent_ids)).all()
         return [_agent_to_config(a) for a in agents]
-    
+
     def get_simulation(self, simulation_id: str) -> SimulationConfig | None:
         sim = self.db.query(SimulationFormula).filter(SimulationFormula.id == simulation_id).first()
         if not sim:
             return None
         return _simulation_to_config(sim)
-    
+
     def get_simulations(self, simulation_ids: list[str]) -> list[SimulationConfig]:
         sims = self.db.query(SimulationFormula).filter(SimulationFormula.id.in_(simulation_ids)).all()
         return [_simulation_to_config(s) for s in sims]
-    
+
     def get_chunk(self, chunk_id: str) -> TextChunk | None:
         chunk = self.db.query(TextChunkModel).filter(TextChunkModel.id == chunk_id).first()
         if not chunk:
             return None
-        
+
         # Get document name
         doc = self.db.query(KnowledgeDocument).filter(KnowledgeDocument.id == chunk.document_id).first()
         document_name = doc.filename if doc else ""
-        
+
         return _chunk_to_dataclass(chunk, document_name)
-    
+
     def get_chunks(self, chunk_ids: list[str]) -> list[TextChunk]:
         chunks = self.db.query(TextChunkModel).filter(TextChunkModel.id.in_(chunk_ids)).all()
 

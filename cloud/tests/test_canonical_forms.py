@@ -10,22 +10,18 @@ Covers:
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from hivemind_core.debate import (
-    _extract_canonical_form,
+    _BudgetGuard,
     _detect_contradiction,
+    _extract_canonical_form,
     _merge_canonical_forms,
     cluster_solutions_monitor_v2,
-    _BudgetGuard,
 )
 from hivemind_core.types import (
-    BudgetExhausted,
     HivemindInput,
     LLMInterface,
     TheoryUnitSolution,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

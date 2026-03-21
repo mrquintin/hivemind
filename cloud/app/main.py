@@ -10,7 +10,6 @@ from fastapi.templating import Jinja2Templates
 from app.config import settings
 from app.runtime_paths import logs_dir, uploads_root
 
-
 _LOG_DIR = logs_dir()
 _LOG_FILE = _LOG_DIR / "cloud.log"
 
@@ -55,28 +54,23 @@ _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 from app.db.base import Base
 from app.db.session import engine
-from app.models import (
-    agent,
-    analysis,
-    client,
-    client_data,
-    knowledge_base,
-    knowledge_document,
-    scraped_source,
-    simulation_formula,
-    text_chunk,
-)
 from app.routers import (
     agents,
-    analysis as analysis_router,
     auth,
-    client_data as client_data_router,
     clients,
     knowledge_bases,
     scraped_sources,
-    settings as settings_router,
     simulations,
     sync,
+)
+from app.routers import (
+    analysis as analysis_router,
+)
+from app.routers import (
+    client_data as client_data_router,
+)
+from app.routers import (
+    settings as settings_router,
 )
 from app.ws import router as ws_router
 
@@ -192,8 +186,8 @@ def _check_readiness() -> tuple[bool, str]:
     except Exception as e:
         return False, f"database: {str(e)[:100]}"
     try:
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         req = urllib.request.Request(f"{settings.VECTOR_DB_URL.rstrip('/')}/healthz", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -224,14 +218,15 @@ def health_check():
 def detailed_health_check():
     """Detailed health check that tests the app dependencies used on AWS."""
     from sqlalchemy import text
+
     from app.db.session import SessionLocal
-    
+
     results = {
         "api": {"status": "online", "message": "FastAPI running"},
         "database": {"status": "unknown", "message": "Not checked"},
         "qdrant": {"status": "unknown", "message": "Not checked"},
     }
-    
+
     # Check Database — use engine.connect() directly for a clean, isolated check
     db = None
     try:
@@ -246,11 +241,11 @@ def detailed_health_check():
                 db.close()
             except Exception:
                 pass
-    
+
     # Check Qdrant
     try:
-        import urllib.request
         import urllib.error
+        import urllib.request
         req = urllib.request.Request(f"{settings.VECTOR_DB_URL.rstrip('/')}/healthz", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status == 200:
@@ -261,10 +256,10 @@ def detailed_health_check():
         results["qdrant"] = {"status": "offline", "message": f"Connection failed: {str(e.reason)[:50]}"}
     except Exception as e:
         results["qdrant"] = {"status": "offline", "message": str(e)[:100]}
-    
+
     # Overall status
     all_online = all(r["status"] == "online" for r in results.values())
-    
+
     return {
         "overall": "healthy" if all_online else "degraded",
         "services": results,
