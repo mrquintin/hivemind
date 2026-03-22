@@ -73,14 +73,33 @@ _ALLOWED_NODE_TYPES = {
     ast.List,
 }
 
+_DANGEROUS_CALL_NAMES = {
+    "__import__",
+    "compile",
+    "eval",
+    "exec",
+    "getattr",
+    "globals",
+    "input",
+    "locals",
+    "open",
+    "setattr",
+    "vars",
+}
 
-def _validate_ast(tree: ast.AST) -> None:
+
+def _validate_ast(tree: ast.AST, allowed_function_names: set[str]) -> None:
     for node in ast.walk(tree):
         if type(node) not in _ALLOWED_NODE_TYPES:
             raise ValueError(f"Unsupported expression: {type(node).__name__}")
         if isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name):
                 raise ValueError("Only direct function calls are allowed")
+            func_name = node.func.id
+            if func_name in _DANGEROUS_CALL_NAMES:
+                raise ValueError(f"Blocked function call: {func_name}")
+            if func_name not in allowed_function_names:
+                raise ValueError(f"Unsupported function call: {func_name}")
 
 
 def _allowed_env() -> dict[str, Any]:
@@ -91,9 +110,10 @@ def _allowed_env() -> dict[str, Any]:
 
 def _evaluate(calculations: str, variables: dict[str, Any]) -> dict[str, Any]:
     tree = ast.parse(calculations, mode="exec")
-    _validate_ast(tree)
-
     env = _allowed_env()
+    _validate_ast(tree, set(env.keys()))
+    safe_globals: dict[str, Any] = {"__builtins__": {}}
+    safe_globals.update(env)
     locals_map = dict(variables)
 
     for node in tree.body:
@@ -101,10 +121,10 @@ def _evaluate(calculations: str, variables: dict[str, Any]) -> dict[str, Any]:
             if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
                 raise ValueError("Only simple assignments are allowed")
             target = node.targets[0].id
-            value = eval(compile(ast.Expression(node.value), "<expr>", "eval"), env, locals_map)
+            value = eval(compile(ast.Expression(node.value), "<expr>", "eval"), safe_globals, locals_map)
             locals_map[target] = value
         elif isinstance(node, ast.Expr):
-            eval(compile(ast.Expression(node.value), "<expr>", "eval"), env, locals_map)
+            eval(compile(ast.Expression(node.value), "<expr>", "eval"), safe_globals, locals_map)
         else:
             raise ValueError("Only assignments or expressions are allowed")
 

@@ -99,3 +99,20 @@ class TestClientDataCRUD:
     def test_requires_auth(self, client):
         res = client.get(f"/clients/{CLIENT_ID}/data")
         assert res.status_code in (401, 403)
+
+    def test_client_role_cannot_access_other_client_id(self, client, client_headers):
+        res = client.get(f"/clients/{CLIENT_ID}/data", headers=client_headers)
+        assert res.status_code == 403
+
+    def test_client_role_can_create_and_list_own_data(self, client, client_headers):
+        own_id = "client-1"
+        create_res = client.post(
+            f"/clients/{own_id}/data",
+            json={"label": "Owned", "content": "My data", "metadata": {}},
+            headers=client_headers,
+        )
+        assert create_res.status_code == 200
+
+        list_res = client.get(f"/clients/{own_id}/data", headers=client_headers)
+        assert list_res.status_code == 200
+        assert len(list_res.json()) == 1

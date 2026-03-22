@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.deps import get_current_user, get_db
+from app.deps import get_any_authenticated, get_current_user, get_db
 from app.models.agent import AgentDefinition
 from app.schemas.agent import AgentCreate, AgentOut, AgentTestRequest, AgentUpdate
 from app.services.agent_execution import execute_agent
@@ -15,11 +15,17 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 def list_agents(
     db: Session = Depends(get_db),
     status: str | None = Query(None, description="Filter by status, e.g. 'published'"),
-    _user: dict = Depends(get_current_user),
+    _user: dict = Depends(get_any_authenticated),
 ):
     query = db.query(AgentDefinition)
-    if status is not None:
+
+    if _user.get("role") == "client":
+        if status is not None and status != "published":
+            return []
+        query = query.filter(AgentDefinition.status == "published")
+    elif status is not None:
         query = query.filter(AgentDefinition.status == status)
+
     return query.all()
 
 

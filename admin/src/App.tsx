@@ -79,8 +79,14 @@ export default function App() {
     // Validate the token with a lightweight authenticated request
     getApiKeyStatus()
       .then(() => setAuthenticated(true))
-      .catch(() => {
-        logout(); // Token expired or invalid — clear it
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "";
+        // Only clear session on explicit auth failures, not transient network errors.
+        if (message.includes("401") || message.includes("403")) {
+          logout();
+          return;
+        }
+        setAuthenticated(true);
       })
       .finally(() => setChecking(false));
   }, []);

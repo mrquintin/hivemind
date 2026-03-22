@@ -128,8 +128,10 @@ export default function Settings() {
   };
 
   const sourceLabel: Record<string, string> = {
-    settings_file: "Settings file (encrypted)",
+    api_key_file: ".api_key file (encrypted)",
+    server_settings: "Server settings file (encrypted)",
     environment: "Environment variable",
+    settings_file: "Settings file (encrypted)",
     encrypted_store: "Encrypted store",
   };
 

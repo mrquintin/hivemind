@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # CORS - comma-separated list of allowed origins.
     # Default includes Tauri desktop origins and localhost dev servers.
     # Set to "*" to allow all origins (NOT recommended for production).
-    CORS_ORIGINS: str = "tauri://localhost,https://tauri.localhost,http://localhost:1420,http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "tauri://localhost,https://tauri.localhost,http://localhost:1420,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:3000"
 
 
 settings = Settings()

@@ -483,6 +483,7 @@ export default function App() {
     setLoginError("");
     try {
       await enterSystem({ username: username.trim(), password });
+      setPassword("");
       setPhase("login_fade_out");
       try {
         const a = await listPublishedAgents();
@@ -581,10 +582,9 @@ export default function App() {
 
       case "solution_generated": {
         const name = event.agent_name as string;
-        const id = event.agent_id as string;
         setActiveTheoryAgent(name);
         setTheoryUnitNames((prev) => prev.includes(name) ? prev : [...prev, name]);
-        setCompletedTheoryAgents((prev) => new Set(prev).add(id));
+        setCompletedTheoryAgents((prev) => new Set(prev).add(name));
         break;
       }
 
@@ -888,6 +888,40 @@ export default function App() {
                 <span className={`connection-dot ${connectionStatus}`} />
                 <span>{connectionStatus === "connected" ? "Online" : "Offline"}</span>
               </div>
+              <button
+                className="btn btn-secondary header-logout-btn"
+                onClick={() => {
+                  // Cancel any active analysis stream
+                  abortRef.current?.abort();
+                  abortRef.current = null;
+                  // Stop health check polling
+                  if (healthRef.current) clearTimeout(healthRef.current);
+                  retryCountRef.current = 0;
+                  setConnectionStatus("connecting");
+                  // Clear auth
+                  logout();
+                  // Reset all state
+                  setPhase("login");
+                  setUsername("");
+                  setPassword("");
+                  setLoginError("");
+                  setAgents([]);
+                  setProblemText("");
+                  setContextText("");
+                  setClientId(null);
+                  setClientDataEntries([]);
+                  setScrapedSources([]);
+                  setNewSourceUrl("");
+                  setShowDataPanel(false);
+                  setShowAdvanced(false);
+                  setAnalysisResult(null);
+                  setAnalysisError(null);
+                  setAnalysisStep("initializing");
+                  runHealthCheck();
+                }}
+              >
+                Logout
+              </button>
             </div>
 
             <div className="input-section">

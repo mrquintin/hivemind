@@ -46,3 +46,26 @@ def test_format_simulations_for_prompt_with_formulas():
     )
     result = format_simulations_for_prompt([formula])
     assert "Revenue Model" in result
+
+
+def test_run_simulation_blocks_dangerous_builtin():
+    formula = SimulationFormula(
+        id="f2",
+        name="Unsafe",
+        calculations="x = __import__('math')",
+        outputs=[SimulationIO(name="x")],
+    )
+    with pytest.raises(ValueError, match="Blocked function call"):
+        run_simulation(formula, {})
+
+
+def test_run_python_program_simulation():
+    formula = SimulationFormula(
+        id="f3",
+        name="Python Program",
+        simulation_type="python_program",
+        code="outputs['sum'] = inputs.get('a', 0) + inputs.get('b', 0)",
+        outputs=[SimulationIO(name="sum")],
+    )
+    result = run_simulation(formula, {"a": 2, "b": 3})
+    assert result["outputs"]["sum"] == 5

@@ -76,7 +76,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     _check_login_rate_limit(username)
 
     user = db.query(User).filter(User.username == username).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    try:
+        password_ok = user is not None and verify_password(payload.password, user.password_hash)
+    except (ValueError, TypeError):
+        # Corrupted hash in database — treat as auth failure, not server error
+        password_ok = False
+    if not password_ok:
         _record_failed_attempt(username)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 

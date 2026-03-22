@@ -2,6 +2,8 @@
 # Hivemind Admin App Launcher
 # Includes: target cleanup on build failure, expedited startup, loading screen
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ADMIN_DIR="$ROOT_DIR/admin"
@@ -19,6 +21,19 @@ echo ''
 
 cd "$ADMIN_DIR" || { echo "ERROR: admin/ folder not found"; exit 1; }
 
+ensure_prereqs() {
+    if ! command -v node &> /dev/null; then
+        [ -n "$(command -v brew)" ] && brew install node || { echo '   ERROR: Install Node.js from https://nodejs.org/'; exit 1; }
+    fi
+
+    if ! command -v cargo &> /dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+    fi
+}
+
+ensure_prereqs
+
 # Expedited: skip heavy cache clears on repeat runs
 if [ -f "$MARKER" ]; then
     echo '   Using existing setup.'
@@ -33,15 +48,6 @@ else
     echo '   First run — installing prerequisites...'
     echo ''
     rm -rf node_modules/.cache node_modules/.vite 2>/dev/null
-
-    if ! command -v node &> /dev/null; then
-        [ -n "$(command -v brew)" ] && brew install node || { echo '   ERROR: Install Node.js from https://nodejs.org/'; exit 1; }
-    fi
-
-    if ! command -v cargo &> /dev/null; then
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-    fi
 
     npm install --prefer-offline --no-audit --no-fund 2>/dev/null || npm install
     date > "$MARKER"
@@ -60,7 +66,6 @@ run_tauri() {
     ./node_modules/.bin/tauri dev
 }
 
-set -o pipefail
 TAURI_OUTPUT=$(mktemp)
 if ! run_tauri 2>&1 | tee "$TAURI_OUTPUT"; then
     EXIT=${PIPESTATUS[0]:-1}
@@ -68,7 +73,9 @@ if ! run_tauri 2>&1 | tee "$TAURI_OUTPUT"; then
         echo ''
         echo '   Build cache corrupted — clearing and retrying...'
         rm -rf "$TARGET_DIR"
-        run_tauri
+        if ! run_tauri; then
+            exit $?
+        fi
     else
         exit $EXIT
     fi

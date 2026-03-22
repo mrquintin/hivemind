@@ -292,6 +292,13 @@ body {
   gap: 1rem;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
+}
+
+.header-logout-btn {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 4px 12px;
+  opacity: 0.7;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 

@@ -2,30 +2,15 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.models.user import User
 from app.security import hash_password
 
 logger = logging.getLogger("hivemind.cloud")
-
-_DEFAULT_USERS = [
-    {
-        "username": "admin",
-        "password_env": "DEFAULT_ADMIN_PASSWORD",
-        "password_fallback": "hivemind-admin-2024",
-        "role": "operator",
-    },
-    {
-        "username": "client",
-        "password_env": "DEFAULT_CLIENT_PASSWORD",
-        "password_fallback": "hivemind-client-2024",
-        "role": "client",
-    },
-]
 
 
 def seed_default_users(engine: Engine) -> None:
@@ -37,17 +22,21 @@ def seed_default_users(engine: Engine) -> None:
         if count > 0:
             return
 
-        for u in _DEFAULT_USERS:
-            password = os.environ.get(u["password_env"], u["password_fallback"])
+        users_to_create = [
+            ("admin", settings.DEFAULT_ADMIN_PASSWORD, "operator"),
+            ("client", settings.DEFAULT_CLIENT_PASSWORD, "client"),
+        ]
+
+        for username, password, role in users_to_create:
             user = User(
-                username=u["username"],
+                username=username,
                 password_hash=hash_password(password),
-                role=u["role"],
+                role=role,
             )
             session.add(user)
 
         session.commit()
-        logger.info("Seeded %d default users.", len(_DEFAULT_USERS))
+        logger.info("Seeded %d default users.", len(users_to_create))
     except Exception:
         session.rollback()
         logger.exception("Failed to seed default users.")

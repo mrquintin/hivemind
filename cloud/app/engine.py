@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from app.adapters.llm import ClaudeAdapter
 from app.adapters.storage import PostgresStorage
 from app.adapters.vector_db import QdrantVectorDB
+from app.routers.settings import get_active_api_key
 from hivemind_core import HivemindEngine
 
 if TYPE_CHECKING:
@@ -28,8 +29,9 @@ def create_engine(db: "Session") -> HivemindEngine:
     Returns:
         Configured HivemindEngine ready for analysis
     """
+    api_key = get_active_api_key()
     return HivemindEngine(
-        llm=ClaudeAdapter(),
+        llm=ClaudeAdapter(api_key=api_key),
         vector_store=QdrantVectorDB(),
         storage=PostgresStorage(db),
     )

@@ -77,7 +77,8 @@ Server configuration is env-driven. For AWS, the most important values are:
 DATABASE_URL=postgresql+psycopg2://hivemind:password@your-rds-endpoint:5432/hivemind?sslmode=require
 VECTOR_DB_URL=http://qdrant:6333
 JWT_SECRET=replace-me
-CLEARED_USERNAMES=admin,developer
+DEFAULT_ADMIN_PASSWORD=hivemind-admin-2024
+DEFAULT_CLIENT_PASSWORD=hivemind-client-2024
 ANTHROPIC_API_KEY=sk-ant-...
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000

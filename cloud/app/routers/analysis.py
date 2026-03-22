@@ -7,6 +7,7 @@ import collections
 import dataclasses
 import threading
 import time
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -57,6 +58,35 @@ def _check_rate_limit(user_id: str) -> None:
                 detail=f"Rate limit exceeded. Max {_RATE_LIMIT_MAX} analysis requests per {_RATE_LIMIT_WINDOW_S}s.",
             )
         bucket.append(now)
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return True
+
+
+def _assert_analysis_access(analysis: AnalysisResult, current_user: dict) -> None:
+    """Enforce analysis ownership for client-role users."""
+    if current_user.get("role") == "operator":
+        return
+
+    current_sub = str(current_user.get("sub") or "")
+    if not current_sub:
+        raise HTTPException(status_code=403, detail="Invalid token subject")
+
+    request_data = analysis.request if isinstance(analysis.request, dict) else {}
+    owner_sub = request_data.get("_owner_sub")
+    if isinstance(owner_sub, str) and owner_sub == current_sub:
+        return
+
+    if analysis.client_id and analysis.client_id == current_sub:
+        return
+
+    # Hide existence for unauthorized users
+    raise HTTPException(status_code=404, detail="Analysis not found")
 
 
 def _resolve_agents_by_profile_and_decision(
@@ -244,8 +274,15 @@ def run_analysis(payload: AnalysisRequest, db: Session = Depends(get_db), _clien
     vetoed = [_recommendation_to_out(rec) for rec in output.vetoed_solutions]
     audit_trail = [_audit_event_to_dict(event) for event in output.audit_trail]
 
+    owner_sub = str(_client.get("sub") or "")
+    request_payload = payload.model_dump()
+    request_payload["_owner_sub"] = owner_sub
+    request_payload["_owner_role"] = _client.get("role")
+    owner_client_id = owner_sub if _client.get("role") == "client" and _is_uuid(owner_sub) else None
+
     analysis = AnalysisResult(
-        request=payload.model_dump(),
+        client_id=owner_client_id,
+        request=request_payload,
         recommendations=[r.model_dump() for r in recommendations],
         vetoed_solutions=[v.model_dump() for v in vetoed],
         debate_rounds=output.debate_rounds,
@@ -344,6 +381,7 @@ def get_analysis(analysis_id: str, db: Session = Depends(get_db), _client: dict 
     analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    _assert_analysis_access(analysis, _client)
     return analysis
 
 
@@ -353,4 +391,5 @@ def get_audit(analysis_id: str, db: Session = Depends(get_db), _client: dict = D
     analysis = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    _assert_analysis_access(analysis, _client)
     return {"audit_trail": analysis.audit_trail or []}

@@ -102,3 +102,50 @@ class TestAnalysisRateLimit:
         # 11th request should be rate limited
         res = client.post("/analysis/run", json=payload, headers=operator_headers)
         assert res.status_code == 429
+
+
+class TestAnalysisAccessControl:
+    def setup_method(self):
+        from app.routers.analysis import _rate_buckets
+
+        _rate_buckets.clear()
+
+    @patch("app.routers.analysis.create_engine")
+    def test_client_cannot_read_operator_analysis(self, mock_create_engine, client, operator_headers, client_headers):
+        mock_engine = MagicMock()
+        mock_engine.analyze.return_value = _make_mock_output()
+        mock_create_engine.return_value = mock_engine
+
+        create_res = client.post(
+            "/analysis/run",
+            json={
+                "problem_statement": "operator-owned analysis",
+                "enabled_theory_agent_ids": ["agent-1"],
+            },
+            headers=operator_headers,
+        )
+        assert create_res.status_code == 200
+        analysis_id = create_res.json()["id"]
+
+        get_res = client.get(f"/analysis/{analysis_id}", headers=client_headers)
+        assert get_res.status_code == 404
+
+    @patch("app.routers.analysis.create_engine")
+    def test_client_can_read_own_analysis(self, mock_create_engine, client, client_headers):
+        mock_engine = MagicMock()
+        mock_engine.analyze.return_value = _make_mock_output()
+        mock_create_engine.return_value = mock_engine
+
+        create_res = client.post(
+            "/analysis/run",
+            json={
+                "problem_statement": "client-owned analysis",
+                "enabled_theory_agent_ids": ["agent-1"],
+            },
+            headers=client_headers,
+        )
+        assert create_res.status_code == 200
+        analysis_id = create_res.json()["id"]
+
+        get_res = client.get(f"/analysis/{analysis_id}", headers=client_headers)
+        assert get_res.status_code == 200

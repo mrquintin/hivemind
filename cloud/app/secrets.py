@@ -6,34 +6,56 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 
 from cryptography.fernet import Fernet
 
 from app.runtime_paths import api_key_file
 
-# Encryption key derived from a fixed salt (the actual security comes from
-# the encrypted value being meaningless without this code + the salt)
-_SALT = b"hivemind_secure_key_storage_v1"
+# Legacy fallback key material kept for backward compatibility with already
+# sealed .api_key files created before per-deployment secrets were supported.
+_LEGACY_KEY_MATERIAL = b"hivemind_secure_key_storage_v1"
 
 
-def _get_cipher() -> Fernet:
-    """Create a Fernet cipher using a deterministic key derived from the salt."""
-    # Derive a 32-byte key from the salt using SHA-256
-    key_material = hashlib.sha256(_SALT).digest()
+def _cipher_from_seed(seed: bytes) -> Fernet:
+    """Create a Fernet cipher from arbitrary seed bytes."""
+    key_material = hashlib.sha256(seed).digest()
     fernet_key = base64.urlsafe_b64encode(key_material)
     return Fernet(fernet_key)
 
 
+def _active_seed() -> bytes:
+    """Resolve encryption seed from environment with safe fallback."""
+    # Prefer a dedicated secret. Fall back to JWT secret for convenience.
+    configured = (os.getenv("HIVEMIND_ENCRYPTION_SECRET") or os.getenv("JWT_SECRET") or "").strip()
+    if configured and configured != "change-me":
+        return configured.encode("utf-8")
+    return _LEGACY_KEY_MATERIAL
+
+
+def _cipher_candidates() -> list[Fernet]:
+    """Return decryption candidates (active first, then legacy when needed)."""
+    active_seed = _active_seed()
+    candidates = [_cipher_from_seed(active_seed)]
+    if active_seed != _LEGACY_KEY_MATERIAL:
+        candidates.append(_cipher_from_seed(_LEGACY_KEY_MATERIAL))
+    return candidates
+
+
 def decrypt_api_key(encrypted_value: str) -> str:
     """Decrypt an API key that was encrypted with encrypt_api_key()."""
-    cipher = _get_cipher()
-    decrypted = cipher.decrypt(encrypted_value.encode())
-    return decrypted.decode()
+    for cipher in _cipher_candidates():
+        try:
+            decrypted = cipher.decrypt(encrypted_value.encode())
+            return decrypted.decode()
+        except Exception:
+            continue
+    raise ValueError("Unable to decrypt API key with configured secrets")
 
 
 def encrypt_api_key(plain_value: str) -> str:
     """Encrypt an API key for storage. Used once to generate the encrypted value."""
-    cipher = _get_cipher()
+    cipher = _cipher_candidates()[0]
     encrypted = cipher.encrypt(plain_value.encode())
     return encrypted.decode()
 

@@ -13,6 +13,12 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
       - qdrant_tmp:/qdrant/tmp
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   app:
     build:
@@ -42,7 +48,7 @@ services:
       start_period: 40s
     depends_on:
       qdrant:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   qdrant_storage:

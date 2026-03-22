@@ -155,8 +155,10 @@ class SQLAlchemyStorage(StorageInterface):
             id=sim.id,
             name=sim.name,
             description=sim.description,
+            simulation_type=sim.simulation_type or "formula",
             inputs=inputs,
             calculations=sim.calculations,
             outputs=outputs,
+            code=sim.code,
             tags=sim.tags or [],
         )

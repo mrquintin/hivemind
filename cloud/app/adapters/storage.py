@@ -75,9 +75,11 @@ def _simulation_to_config(sim: SimulationFormula) -> SimulationConfig:
         id=sim.id,
         name=sim.name,
         description=sim.description or "",
+        simulation_type=sim.simulation_type or "formula",
         inputs=inputs,
         calculations=sim.calculations,
         outputs=outputs,
+        code=sim.code,
         tags=sim.tags or [],
     )
 

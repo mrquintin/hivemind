@@ -6,7 +6,11 @@ Supports high-level mathematics via Python's math library.
 from __future__ import annotations
 
 import ast
+import json
 import math
+import os
+import subprocess
+import tempfile
 from typing import Any
 
 from hivemind_core.types import SimulationFormula
@@ -47,8 +51,24 @@ _ALLOWED_NODE_TYPES = {
     ast.Not,
 }
 
+_DANGEROUS_CALL_NAMES = {
+    "__import__",
+    "compile",
+    "eval",
+    "exec",
+    "getattr",
+    "globals",
+    "input",
+    "locals",
+    "open",
+    "setattr",
+    "vars",
+}
 
-def _validate_ast(tree: ast.AST) -> None:
+PYTHON_SANDBOX_TIMEOUT = 10
+
+
+def _validate_ast(tree: ast.AST, allowed_function_names: set[str]) -> None:
     """Validate that the AST only contains allowed node types."""
     for node in ast.walk(tree):
         if type(node) not in _ALLOWED_NODE_TYPES:
@@ -56,6 +76,11 @@ def _validate_ast(tree: ast.AST) -> None:
         if isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name):
                 raise ValueError("Only direct function calls are allowed")
+            func_name = node.func.id
+            if func_name in _DANGEROUS_CALL_NAMES:
+                raise ValueError(f"Blocked function call: {func_name}")
+            if func_name not in allowed_function_names:
+                raise ValueError(f"Unsupported function call: {func_name}")
 
 
 def _allowed_env() -> dict[str, Any]:
@@ -80,12 +105,53 @@ def _allowed_env() -> dict[str, Any]:
     return allowed
 
 
+def _run_python_program(code: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Run python_program simulations in a bounded subprocess."""
+    input_json = json.dumps(inputs)
+    wrapper = (
+        "import json,sys\n"
+        "inputs = json.load(sys.stdin)\n"
+        "outputs = {}\n"
+        f"{code}\n"
+        "print(json.dumps(outputs))"
+    )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(wrapper)
+        tmp = f.name
+
+    try:
+        proc = subprocess.run(
+            ["python3", tmp],
+            input=input_json,
+            capture_output=True,
+            text=True,
+            timeout=PYTHON_SANDBOX_TIMEOUT,
+            env={k: v for k, v in os.environ.items() if k in ("PATH", "HOME")},
+            cwd=os.path.abspath(os.path.dirname(tmp)),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("Python simulation timed out") from exc
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+    if proc.returncode != 0:
+        raise ValueError(f"Python simulation failed: {proc.stderr or proc.stdout}")
+
+    out = json.loads(proc.stdout) if proc.stdout.strip() else {}
+    return {"outputs": out, "variables": {**inputs, **out}}
+
+
 def _evaluate(calculations: str, variables: dict[str, Any]) -> dict[str, Any]:
     """Safely evaluate calculations with the given variables."""
     tree = ast.parse(calculations, mode="exec")
-    _validate_ast(tree)
-
     env = _allowed_env()
+    _validate_ast(tree, set(env.keys()))
+    safe_globals: dict[str, Any] = {"__builtins__": {}}
+    safe_globals.update(env)
     locals_map = dict(variables)
 
     for node in tree.body:
@@ -94,11 +160,11 @@ def _evaluate(calculations: str, variables: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("Only simple assignments are allowed")
             target = node.targets[0].id
             value = eval(
-                compile(ast.Expression(node.value), "<expr>", "eval"), env, locals_map
+                compile(ast.Expression(node.value), "<expr>", "eval"), safe_globals, locals_map
             )
             locals_map[target] = value
         elif isinstance(node, ast.Expr):
-            eval(compile(ast.Expression(node.value), "<expr>", "eval"), env, locals_map)
+            eval(compile(ast.Expression(node.value), "<expr>", "eval"), safe_globals, locals_map)
         else:
             raise ValueError("Only assignments or expressions are allowed")
 
@@ -117,9 +183,22 @@ def run_simulation(
     Returns:
         Dict with 'outputs' (declared outputs) and 'variables' (all computed values)
     """
+    if isinstance(formula, dict):
+        sim_type = formula.get("simulation_type", "formula")
+        code = formula.get("code")
+    else:
+        sim_type = getattr(formula, "simulation_type", "formula")
+        code = getattr(formula, "code", None)
+
+    if sim_type == "python_program":
+        if not code:
+            raise ValueError("Python simulation is missing code")
+        return _run_python_program(code, inputs)
+
     # Build initial variables from defaults
     defaults = {}
-    for entry in formula.inputs:
+    formula_inputs = formula.get("inputs", []) if isinstance(formula, dict) else formula.inputs
+    for entry in formula_inputs:
         if isinstance(entry, dict):
             name = entry.get("name")
             default = entry.get("default_value")
@@ -134,11 +213,13 @@ def run_simulation(
     variables = {k: v for k, v in variables.items() if v is not None}
 
     # Run the calculations
-    variables = _evaluate(formula.calculations, variables)
+    calculations = formula.get("calculations", "") if isinstance(formula, dict) else formula.calculations
+    variables = _evaluate(calculations, variables)
 
     # Extract declared outputs
     outputs = {}
-    for output in formula.outputs:
+    formula_outputs = formula.get("outputs", []) if isinstance(formula, dict) else formula.outputs
+    for output in formula_outputs:
         if isinstance(output, dict):
             name = output.get("name")
         else:

@@ -29,6 +29,42 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
 
+_MAX_UPLOAD_BYTES = 50_000_000  # 50 MB
+
+
+def _read_uploaded_file(file: UploadFile, max_bytes: int = _MAX_UPLOAD_BYTES) -> bytes:
+    """Read an upload with a hard byte limit to prevent memory exhaustion."""
+    data = file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File too large (max {max_bytes // 1_000_000} MB)")
+    return data
+
+
+def _compute_density_bounds(kb_ids: str, db: Session) -> dict[str, Any]:
+    """Return min per-document tokens and sum total tokens for selected KBs."""
+    id_list = [k.strip() for k in kb_ids.split(",") if k.strip()]
+    if not id_list:
+        raise HTTPException(status_code=400, detail="kb_ids is required")
+
+    rows = (
+        db.query(
+            TextChunk.document_id,
+            func.sum(TextChunk.token_count).label("doc_tokens"),
+        )
+        .filter(TextChunk.knowledge_base_id.in_(id_list))
+        .group_by(TextChunk.document_id)
+        .all()
+    )
+
+    if not rows:
+        return {"min_doc_tokens": 0, "sum_all_doc_tokens": 0}
+
+    per_doc = [int(r.doc_tokens) for r in rows]
+    return {
+        "min_doc_tokens": min(per_doc),
+        "sum_all_doc_tokens": sum(per_doc),
+    }
+
 
 # ---------------------------------------------------------------------------
 # CRUD
@@ -51,6 +87,16 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, db: Session = Depends(ge
     db.commit()
     db.refresh(kb)
     return kb
+
+
+@router.get("/density-bounds", response_model=dict[str, Any])
+def get_density_bounds_legacy(
+    kb_ids: str = Query(..., description="Comma-separated knowledge base IDs"),
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """Backward-compatible path for existing clients."""
+    return _compute_density_bounds(kb_ids, db)
 
 
 @router.get("/{kb_id}", response_model=KnowledgeBaseOut)
@@ -105,27 +151,36 @@ def _process_and_embed(
             )
         )
 
-    db.add_all(chunk_rows)
-    db.commit()
+    try:
+        db.add_all(chunk_rows)
+        db.flush()
 
-    if embeddings:
-        ids = [chunk.id for chunk in chunk_rows]
-        payloads = [
-            {
-                "knowledge_base_id": kb_id,
-                "document_id": document.id,
-                "chunk_index": chunk.chunk_index,
-            }
-            for chunk in chunk_rows
-        ]
-        upsert_embeddings(f"kb_{kb_id}", ids, embeddings, payloads)
+        if embeddings:
+            ids = [chunk.id for chunk in chunk_rows]
+            payloads = [
+                {
+                    "knowledge_base_id": kb_id,
+                    "document_id": document.id,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "document_name": document.filename,
+                    "source_page": chunk.source_page,
+                }
+                for chunk in chunk_rows
+            ]
+            upsert_embeddings(f"kb_{kb_id}", ids, embeddings, payloads)
 
-    kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
-    if kb:
-        kb.document_count += 1
-        kb.chunk_count += len(chunk_rows)
-        kb.total_tokens += sum(chunk.token_count for chunk in chunk_rows)
+        kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+        if kb:
+            kb.document_count += 1
+            kb.chunk_count += len(chunk_rows)
+            kb.total_tokens += sum(chunk.token_count for chunk in chunk_rows)
+
         db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed during chunk embed/upsert for KB %s doc %s", kb_id, document.id)
+        raise HTTPException(status_code=500, detail="Failed to process and index document") from exc
 
     return len(chunk_rows)
 
@@ -150,7 +205,7 @@ def upload_document(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    data = file.file.read()
+    data = _read_uploaded_file(file)
     content_type = file.content_type or "application/octet-stream"
     s3_path, _ = store_file(file.filename, data, document_type="framework")
     extracted_text = extract_text_from_bytes(content_type, data)
@@ -221,7 +276,7 @@ def upload_simulation(
         )
 
     # Store the .py program file
-    prog_data = program.file.read()
+    prog_data = _read_uploaded_file(program)
     prog_path, _ = store_file(prog_name, prog_data, document_type="simulation_program")
 
     prog_doc = KnowledgeDocument(
@@ -237,7 +292,7 @@ def upload_simulation(
     db.refresh(prog_doc)
 
     # Store and process the companion description
-    desc_data = description.file.read()
+    desc_data = _read_uploaded_file(description)
     desc_content_type = description.content_type or "application/octet-stream"
     desc_path, _ = store_file(desc_name, desc_data, document_type="simulation_description")
     desc_text = extract_text_from_bytes(desc_content_type, desc_data)
@@ -295,7 +350,7 @@ def upload_practicality_document(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    data = file.file.read()
+    data = _read_uploaded_file(file)
     content_type = file.content_type or "application/octet-stream"
     s3_path, _ = store_file(file.filename, data, document_type="practicality")
     extracted_text = extract_text_from_bytes(content_type, data)
@@ -346,7 +401,7 @@ def upload_smart(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    data = file.file.read()
+    data = _read_uploaded_file(file)
     content_type = file.content_type or "application/octet-stream"
     extracted_text = extract_text_from_bytes(content_type, data)
 
@@ -460,32 +515,11 @@ def test_retrieval(kb_id: str, payload: TestRetrievalRequest, db: Session = Depe
 # Density bounds
 # ---------------------------------------------------------------------------
 
-@router.get("/density-bounds", response_model=dict[str, Any])
+@router.get("/density/bounds", response_model=dict[str, Any])
 def get_density_bounds(
     kb_ids: str = Query(..., description="Comma-separated knowledge base IDs"),
     db: Session = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
     """Return min and max token counts for density slider bounds."""
-    id_list = [k.strip() for k in kb_ids.split(",") if k.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="kb_ids is required")
-
-    rows = (
-        db.query(
-            TextChunk.document_id,
-            func.sum(TextChunk.token_count).label("doc_tokens"),
-        )
-        .filter(TextChunk.knowledge_base_id.in_(id_list))
-        .group_by(TextChunk.document_id)
-        .all()
-    )
-
-    if not rows:
-        return {"min_doc_tokens": 0, "sum_all_doc_tokens": 0}
-
-    per_doc = [int(r.doc_tokens) for r in rows]
-    return {
-        "min_doc_tokens": min(per_doc),
-        "sum_all_doc_tokens": sum(per_doc),
-    }
+    return _compute_density_bounds(kb_ids, db)

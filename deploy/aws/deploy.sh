@@ -9,6 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.ec2.yml"
 ENV_FILE="$SCRIPT_DIR/.env.aws"
 
+if ! command -v docker &>/dev/null; then
+  echo "ERROR: docker is not installed. Run bootstrap-ubuntu.sh first."
+  exit 1
+fi
+
+if ! docker compose version &>/dev/null; then
+  echo "ERROR: docker compose plugin is not installed. Run bootstrap-ubuntu.sh first."
+  exit 1
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE"
   echo "Copy deploy/aws/.env.example to deploy/aws/.env.aws and set DATABASE_URL (RDS)."

@@ -275,7 +275,7 @@ def detailed_health_check():
 
 
 @app.post("/admin/ping")
-def admin_ping(request: Request):
+def admin_ping(request: Request, _user: dict = Depends(get_current_user)):
     """Receive a ping from admin to verify connection."""
     global _last_ping_time
     _last_ping_time = time.time()
@@ -295,7 +295,7 @@ def ping_status():
 
 
 @app.get("/dashboard")
-def server_dashboard(request: Request):
+def server_dashboard(request: Request, _user: dict = Depends(get_current_user)):
     """Server dashboard UI showing status and connection info."""
     uptime_seconds = int(time.time() - _server_start_time)
     uptime_str = f"{uptime_seconds // 3600}h {(uptime_seconds % 3600) // 60}m {uptime_seconds % 60}s"

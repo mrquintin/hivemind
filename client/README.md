@@ -198,22 +198,22 @@ API client functions:
 
 ## How Authentication Works
 
-1. User enters their username
-2. Client sends it to `POST /auth/login`
-3. Server checks if username is in `CLEARED_USERNAMES`
+1. User enters their username and password
+2. Client sends credentials to `POST /auth/login`
+3. Server verifies password against bcrypt hash in the database
 4. Server returns a JWT token
 5. Client stores the token and uses it for all subsequent requests
 6. AI calls use the server's API key (configured during Cloud Setup)
 
-**Local storage**: The Client stores the username in localStorage for convenience. Users stay logged in across app restarts until they explicitly log out.
+**Local storage**: The Client stores the auth token in localStorage. Users stay logged in across app restarts until they explicitly log out or the token expires.
 
 ---
 
 ## Troubleshooting
 
-### "Username is not cleared"
+### "Invalid credentials"
 
-Your username isn't in the `CLEARED_USERNAMES` list on the server. Contact The Nash Lab to get added.
+The username or password is incorrect. Default client credentials are username `client`, password `hivemind-client-2024`. Contact your administrator if you need access.
 
 ### "Cannot connect to server"
 

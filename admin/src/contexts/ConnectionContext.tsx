@@ -45,8 +45,13 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
   const checkConnection = useCallback(async () => {
     if (!isActiveRef.current) return;
 
-    setStatus("checking");
-    const result = await checkServerHealth();
+    setStatus((prev) => (prev === "connected" ? prev : "checking"));
+    let result: { connected: boolean };
+    try {
+      result = await checkServerHealth();
+    } catch {
+      result = { connected: false };
+    }
 
     if (!isActiveRef.current) return;
 
@@ -62,9 +67,6 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
       retryRef.current++;
       setRetryCount(retryRef.current);
       const delay = Math.min(2000 + retryRef.current * 1000, 5000);
-      console.log(
-        `Server disconnected, retrying in ${delay / 1000}s (attempt ${retryRef.current})...`
-      );
       timeoutRef.current = setTimeout(checkConnection, delay);
     }
   }, []);

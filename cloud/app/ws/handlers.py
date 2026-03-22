@@ -14,10 +14,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import jwt
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from app.config import settings
 from app.deps import _decode_token
+from app.routers.settings import get_active_api_key
 from hivemind_core import (
     ClaudeLLM,
     execute_agent,
@@ -60,6 +62,7 @@ async def _authenticate_websocket(websocket: WebSocket) -> dict | None:
     """
     token = websocket.query_params.get("token")
     if not token:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Missing auth token")
         return None
     try:
@@ -67,9 +70,39 @@ async def _authenticate_websocket(websocket: WebSocket) -> dict | None:
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
         return _decode_token(creds)
-    except Exception:
+    except (jwt.InvalidTokenError, jwt.ExpiredSignatureError, HTTPException, ValueError):
+        await websocket.accept()
         await websocket.close(code=4001, reason="Invalid or expired token")
         return None
+
+
+async def _resolve_connection_id(
+    websocket: WebSocket,
+    user: dict,
+    requested_client_id: str,
+) -> str | None:
+    """Resolve socket connection identity from auth payload."""
+    subject = str(user.get("sub") or "").strip()
+    role = str(user.get("role") or "").strip()
+
+    if not subject:
+        await websocket.accept()
+        await websocket.close(code=4001, reason="Missing token subject")
+        return None
+
+    if role not in {"operator", "client"}:
+        await websocket.accept()
+        await websocket.close(code=4003, reason="Invalid token role")
+        return None
+
+    if role == "client" and requested_client_id != subject:
+        await websocket.accept()
+        await websocket.close(code=4003, reason="client_id does not match token subject")
+        return None
+
+    if role == "client":
+        return subject
+    return requested_client_id
 
 
 def _serialize_datetime(obj: Any) -> Any:
@@ -132,10 +165,14 @@ async def websocket_analysis(
     if user is None:
         return
 
-    await manager.connect(websocket, client_id)
+    connection_id = await _resolve_connection_id(websocket, user, client_id)
+    if connection_id is None:
+        return
+
+    await manager.connect(websocket, connection_id)
 
     try:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "connected",
             "message": "Connected to Hivemind analysis stream",
@@ -147,23 +184,23 @@ async def websocket_analysis(
             message = json.loads(data)
 
             if message.get("type") == "start_analysis":
-                await _run_streaming_analysis(client_id, message)
+                await _run_streaming_analysis(connection_id, message)
 
             elif message.get("type") == "ping":
-                await manager.send_json(client_id, {"type": "pong"})
+                await manager.send_json(connection_id, {"type": "pong"})
 
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(connection_id)
     except Exception as e:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "error",
             "message": str(e),
         })
-        manager.disconnect(client_id)
+        manager.disconnect(connection_id)
 
 
-async def _run_streaming_analysis(client_id: str, message: dict):
+async def _run_streaming_analysis(connection_id: str, message: dict):
     """Run analysis with streaming updates.
 
     This runs the analysis synchronously but sends progress updates
@@ -174,14 +211,23 @@ async def _run_streaming_analysis(client_id: str, message: dict):
     db = SessionLocal()
 
     try:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "analyzing",
             "message": "Starting analysis...",
         })
 
         # Create core interfaces
-        llm = ClaudeLLM(api_key=settings.ANTHROPIC_API_KEY)
+        api_key = get_active_api_key()
+        if not api_key:
+            await manager.send_json(connection_id, {
+                "type": "status",
+                "status": "error",
+                "message": "No Anthropic API key configured",
+            })
+            return
+
+        llm = ClaudeLLM(api_key=api_key)
         storage = SQLAlchemyStorage(db)
         vector_store = QdrantVectorStore(
             qdrant_url=settings.VECTOR_DB_URL,
@@ -201,7 +247,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
                 theory_agents.append(agent)
 
         if not theory_agents:
-            await manager.send_json(client_id, {
+            await manager.send_json(connection_id, {
                 "type": "status",
                 "status": "error",
                 "message": "No valid theory agents found",
@@ -211,7 +257,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
         # Execute each theory agent with streaming updates
         results = []
         for agent in theory_agents:
-            await manager.send_json(client_id, {
+            await manager.send_json(connection_id, {
                 "type": "agent_start",
                 "agent_id": agent.id,
                 "agent_name": agent.name,
@@ -228,7 +274,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
             )
             results.append(result)
 
-            await manager.send_json(client_id, {
+            await manager.send_json(connection_id, {
                 "type": "agent_complete",
                 "agent_id": result.agent_id,
                 "agent_name": result.agent_name,
@@ -256,7 +302,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
             }
             recommendations.append(rec)
 
-            await manager.send_json(client_id, {
+            await manager.send_json(connection_id, {
                 "type": "recommendation",
                 "recommendation": rec,
             })
@@ -271,7 +317,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
 
             for rec in recommendations:
                 for p_agent in practicality_agents:
-                    await manager.send_json(client_id, {
+                    await manager.send_json(connection_id, {
                         "type": "agent_start",
                         "agent_id": p_agent.id,
                         "agent_name": p_agent.name,
@@ -288,7 +334,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
                         storage=storage,
                     )
 
-                    await manager.send_json(client_id, {
+                    await manager.send_json(connection_id, {
                         "type": "agent_complete",
                         "agent_id": result.agent_id,
                         "agent_name": result.agent_name,
@@ -298,7 +344,7 @@ async def _run_streaming_analysis(client_id: str, message: dict):
                     })
 
         # Send complete result
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "complete",
             "result": {
                 "id": str(uuid.uuid4()),
@@ -307,14 +353,14 @@ async def _run_streaming_analysis(client_id: str, message: dict):
             },
         })
 
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "complete",
             "message": "Analysis complete",
         })
 
     except Exception as e:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "error",
             "message": str(e),
@@ -349,10 +395,14 @@ async def websocket_simulation(
     if user is None:
         return
 
-    await manager.connect(websocket, client_id)
+    connection_id = await _resolve_connection_id(websocket, user, client_id)
+    if connection_id is None:
+        return
+
+    await manager.connect(websocket, connection_id)
 
     try:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "status",
             "status": "connected",
             "message": "Connected to Hivemind simulation stream",
@@ -372,7 +422,7 @@ async def websocket_simulation(
                     formula = storage.get_simulation(message.get("formula_id", ""))
 
                     if not formula:
-                        await manager.send_json(client_id, {
+                        await manager.send_json(connection_id, {
                             "type": "error",
                             "message": "Simulation formula not found",
                         })
@@ -380,7 +430,7 @@ async def websocket_simulation(
 
                     result = run_simulation(formula, message.get("inputs", {}))
 
-                    await manager.send_json(client_id, {
+                    await manager.send_json(connection_id, {
                         "type": "simulation_result",
                         "formula_id": formula.id,
                         "formula_name": formula.name,
@@ -391,13 +441,13 @@ async def websocket_simulation(
                     db.close()
 
             elif message.get("type") == "ping":
-                await manager.send_json(client_id, {"type": "pong"})
+                await manager.send_json(connection_id, {"type": "pong"})
 
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(connection_id)
     except Exception as e:
-        await manager.send_json(client_id, {
+        await manager.send_json(connection_id, {
             "type": "error",
             "message": str(e),
         })
-        manager.disconnect(client_id)
+        manager.disconnect(connection_id)

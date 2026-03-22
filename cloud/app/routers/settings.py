@@ -22,7 +22,10 @@ _SETTINGS_FILE = settings_file()
 
 def _load_settings() -> dict:
     if _SETTINGS_FILE.exists():
-        return json.loads(_SETTINGS_FILE.read_text())
+        try:
+            return json.loads(_SETTINGS_FILE.read_text())
+        except (json.JSONDecodeError, ValueError):
+            return {}
     return {}
 
 

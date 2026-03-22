@@ -214,16 +214,16 @@ If results are wrong:
 
 ## Managing Users
 
-The `CLEARED_USERNAMES` setting in the cloud controls who can log in.
+Users are stored in the database with bcrypt-hashed passwords. Default
+accounts are created on the first server startup (see `credentials.env`
+in the repository root).
 
-To add a user:
+Default credentials:
+- Admin: username `admin`, password `hivemind-admin-2024`
+- Client: username `client`, password `hivemind-client-2024`
 
-1. Open `cloud/.env`
-2. Add the username to `CLEARED_USERNAMES`:
-   ```
-   CLEARED_USERNAMES=alice,bob,charlie,newuser
-   ```
-3. Restart the cloud server
+To change default passwords before first deployment, set
+`DEFAULT_ADMIN_PASSWORD` and `DEFAULT_CLIENT_PASSWORD` in `cloud/.env`.
 
 Users only need their username to log in — the API key is configured on the server.
 

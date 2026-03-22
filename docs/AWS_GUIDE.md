@@ -148,7 +148,8 @@ Edit `deploy/aws/.env.aws`:
 | `DATABASE_URL` | Yes | RDS endpoint. Add `?sslmode=require` for RDS. |
 | `JWT_SECRET` | Yes | Strong random string, e.g. `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `ANTHROPIC_API_KEY` | Yes | From https://console.anthropic.com |
-| `CLEARED_USERNAMES` | Yes | Comma-separated Admin usernames, e.g. `admin,developer` |
+| `DEFAULT_ADMIN_PASSWORD` | No | Admin password (default: `hivemind-admin-2024`). Set before first run. |
+| `DEFAULT_CLIENT_PASSWORD` | No | Client password (default: `hivemind-client-2024`). Set before first run. |
 | `CORS_ORIGINS` | Yes | Include your Admin/Client origins (host from **`EC2-PROVISIONING.local.txt`**) |
 
 Use the real **`DATABASE_URL`** (with password and RDS endpoint) from **`RDS-CREDENTIALS.local.txt`** or build it from **`deploy/aws/.env.example`** after you read the endpoint in the RDS console. Do not commit filled-in values.

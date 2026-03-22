@@ -24,6 +24,7 @@ export default function Dashboard() {
     try {
       const data = await invoke<ServiceStatus>("get_local_status");
       setStatus(data);
+      setError(null);
     } catch (err) {
       setError("Unable to read local server status.");
     }

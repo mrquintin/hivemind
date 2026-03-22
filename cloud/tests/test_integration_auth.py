@@ -92,6 +92,16 @@ class TestAuthEnforcement:
         res = client.get("/agents", headers=expired_headers)
         assert res.status_code == 401
 
+    def test_agents_with_client_token_can_list_published(self, client):
+        login = client.post("/auth/login", json={"username": "testclient", "password": "clientpass"})
+        assert login.status_code == 200
+        token = login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        res = client.get("/agents?status=published", headers=headers)
+        assert res.status_code == 200
+        assert isinstance(res.json(), list)
+
 
 class TestMe:
     def test_get_me_returns_identity(self, client, operator_headers):

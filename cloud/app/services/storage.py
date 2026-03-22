@@ -23,7 +23,12 @@ def _s3_client():
         return None
 
     if settings.S3_CREDENTIALS:
-        creds = json.loads(settings.S3_CREDENTIALS)
+        try:
+            creds = json.loads(settings.S3_CREDENTIALS)
+        except (json.JSONDecodeError, ValueError):
+            # Malformed S3_CREDENTIALS — fall back to IAM role
+            session = boto3.session.Session(region_name=settings.AWS_REGION)
+            return session.client("s3")
         # Support both access_key/secret_key and aws_access_key_id/aws_secret_access_key
         access = creds.get("access_key") or creds.get("aws_access_key_id")
         secret = creds.get("secret_key") or creds.get("aws_secret_access_key")

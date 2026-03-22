@@ -278,9 +278,11 @@ class SimulationFormula:
     id: str
     name: str
     description: str | None = None
+    simulation_type: str = "formula"  # formula | python_program
     inputs: list[SimulationIO] = field(default_factory=list)
     calculations: str = ""
     outputs: list[SimulationIO] = field(default_factory=list)
+    code: str | None = None
     tags: list[str] = field(default_factory=list)
 
 

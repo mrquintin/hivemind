@@ -356,7 +356,7 @@ export async function getDensityBounds(kbIds: string[]): Promise<DensityBounds |
   if (!kbIds.length) return null;
   try {
     return await request<DensityBounds>(
-      `/knowledge-bases/density-bounds?kb_ids=${kbIds.join(",")}`
+      `/knowledge-bases/density/bounds?kb_ids=${kbIds.join(",")}`
     );
   } catch {
     return null;

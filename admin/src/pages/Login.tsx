@@ -20,6 +20,7 @@ export default function Login({ onSuccess }: LoginProps) {
     setError("");
     try {
       await login(trimmed, password);
+      setPassword("");
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
